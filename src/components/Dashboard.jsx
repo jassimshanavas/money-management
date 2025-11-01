@@ -1,0 +1,307 @@
+import React, { useState } from 'react';
+import { useApp } from '../hooks/useAppContext';
+import { formatCurrency, getMonthlyTransactions, calculateTotals } from '../utils/helpers';
+import { TrendingUp, TrendingDown, Wallet, ArrowUpCircle, ArrowDownCircle, CreditCard } from 'lucide-react';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+
+export default function Dashboard() {
+  const { transactions, currency, categories, wallets, selectedWallet, setSelectedWallet } = useApp();
+  const [activeWalletView, setActiveWalletView] = useState('all'); // 'all' or wallet id
+  
+  // Filter transactions by wallet if a specific wallet is selected
+  const filteredTransactions = activeWalletView === 'all' 
+    ? transactions 
+    : transactions.filter(t => t.walletId === activeWalletView);
+  
+  const monthlyTransactions = getMonthlyTransactions(filteredTransactions);
+  const { income, expenses, balance } = calculateTotals(monthlyTransactions);
+  
+  // Calculate balance for each wallet
+  const walletsWithBalance = wallets.map((wallet) => {
+    const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
+    const walletMonthlyTransactions = getMonthlyTransactions(walletTransactions);
+    const { income: wIncome, expenses: wExpenses, balance: wBalance } = calculateTotals(walletMonthlyTransactions);
+    return { 
+      ...wallet, 
+      income: wIncome, 
+      expenses: wExpenses, 
+      calculatedBalance: wBalance,
+      transactionCount: walletTransactions.length
+    };
+  });
+  
+  const totalBalance = walletsWithBalance.reduce((sum, w) => sum + w.calculatedBalance, 0);
+
+  // Prepare chart data for last 7 days
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - i));
+    const dayTransactions = monthlyTransactions.filter(
+      (t) => new Date(t.date).toDateString() === date.toDateString()
+    );
+    const dayIncome = dayTransactions.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const dayExpenses = dayTransactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    return {
+      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      income: dayIncome,
+      expenses: dayExpenses,
+    };
+  });
+
+  const recentTransactions = filteredTransactions
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 5);
+
+  return (
+    <div className="pt-20 md:pt-8 px-4 md:px-8 max-w-7xl mx-auto pb-8">
+      <div className="mb-8 animate-fade-in">
+        <h1 className="text-4xl font-bold mb-2 text-slate-800 dark:text-white">Dashboard</h1>
+        <p className="text-slate-600 dark:text-slate-400">
+          {activeWalletView === 'all' 
+            ? "Welcome back! Here's your financial overview across all wallets."
+            : `Viewing ${wallets.find(w => w.id === activeWalletView)?.name || 'wallet'} transactions.`}
+        </p>
+      </div>
+
+      {/* Wallet Cards Section */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Your Wallets</h2>
+          <button
+            onClick={() => setActiveWalletView(activeWalletView === 'all' ? selectedWallet : 'all')}
+            className="text-sm text-teal-600 dark:text-cyan-400 hover:text-teal-700 dark:hover:text-cyan-300 font-medium"
+          >
+            {activeWalletView === 'all' ? 'View Active Wallet' : 'View All Wallets'}
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {walletsWithBalance.map((wallet, index) => {
+            const isActive = activeWalletView === wallet.id;
+            const isSelected = selectedWallet === wallet.id;
+            return (
+              <div
+                key={wallet.id}
+                onClick={() => {
+                  setActiveWalletView(wallet.id);
+                  setSelectedWallet(wallet.id);
+                }}
+                className={`glass-card p-5 cursor-pointer transition-all duration-300 transform hover:scale-105 animate-slide-up group ${
+                  isActive ? 'ring-2 ring-teal-500 dark:ring-cyan-500 shadow-2xl' : 'hover:shadow-xl'
+                }`}
+                style={{ 
+                  animationDelay: `${index * 0.1}s`,
+                  borderLeft: `4px solid ${wallet.color}`
+                }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-lg group-hover:scale-110 transition-transform"
+                      style={{ backgroundColor: `${wallet.color}20` }}
+                    >
+                      {wallet.icon}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800 dark:text-white">{wallet.name}</h3>
+                      {isSelected && (
+                        <span className="text-xs text-teal-600 dark:text-cyan-400 font-medium">Active</span>
+                      )}
+                    </div>
+                  </div>
+                  <CreditCard 
+                    size={20} 
+                    className={`transition-colors ${isActive ? 'text-teal-500 dark:text-cyan-400' : 'text-slate-400'}`} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Balance</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-white">
+                      {formatCurrency(wallet.calculatedBalance, currency)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs">
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400">Income: </span>
+                      <span className="text-green-500 font-medium">{formatCurrency(wallet.income, currency)}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 dark:text-slate-400">Expenses: </span>
+                      <span className="text-red-500 font-medium">{formatCurrency(wallet.expenses, currency)}</span>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {wallet.transactionCount} transaction{wallet.transactionCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Total Balance Card */}
+        <div className="glass-card p-6 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 border-teal-200 dark:border-teal-800 animate-fade-in">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total Balance Across All Wallets</p>
+              <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+                {formatCurrency(totalBalance, currency)}
+              </h2>
+            </div>
+            <Wallet className="text-teal-600 dark:text-cyan-400" size={32} />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="glass-card p-6 animate-slide-up hover:shadow-2xl transition-all duration-300">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center shadow-lg">
+              <Wallet className="text-white" size={24} />
+            </div>
+            <TrendingUp className="text-green-500" size={20} />
+          </div>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">Total Balance</p>
+          <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+            {formatCurrency(balance, currency)}
+          </h2>
+        </div>
+
+        <div className="glass-card p-6 animate-slide-up hover:shadow-2xl transition-all duration-300" style={{ animationDelay: '0.1s' }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center shadow-lg">
+              <ArrowUpCircle className="text-white" size={24} />
+            </div>
+            <span className="text-green-500 font-semibold">+{formatCurrency(income, currency)}</span>
+          </div>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">Monthly Income</p>
+          <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+            {formatCurrency(income, currency)}
+          </h2>
+        </div>
+
+        <div className="glass-card p-6 animate-slide-up hover:shadow-2xl transition-all duration-300" style={{ animationDelay: '0.2s' }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-400 to-rose-500 flex items-center justify-center shadow-lg">
+              <ArrowDownCircle className="text-white" size={24} />
+            </div>
+            <span className="text-red-500 font-semibold">-{formatCurrency(expenses, currency)}</span>
+          </div>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">Monthly Expenses</p>
+          <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+            {formatCurrency(expenses, currency)}
+          </h2>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="glass-card p-6 animate-fade-in">
+          <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Income vs Expenses (7 Days)</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={last7Days}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.3} />
+              <XAxis dataKey="date" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  border: '1px solid rgba(148, 163, 184, 0.3)',
+                  borderRadius: '12px',
+                }}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="income"
+                stroke="#10b981"
+                strokeWidth={3}
+                dot={{ fill: '#10b981', r: 4 }}
+                name="Income"
+              />
+              <Line
+                type="monotone"
+                dataKey="expenses"
+                stroke="#ef4444"
+                strokeWidth={3}
+                dot={{ fill: '#ef4444', r: 4 }}
+                name="Expenses"
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="glass-card p-6 animate-fade-in">
+          <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Monthly Comparison</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={[{ name: 'Income', value: income }, { name: 'Expenses', value: expenses }]}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.3} />
+              <XAxis dataKey="name" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  border: '1px solid rgba(148, 163, 184, 0.3)',
+                  borderRadius: '12px',
+                }}
+                formatter={(value) => formatCurrency(value, currency)}
+              />
+              <Bar dataKey="value" fill="#14b8a6" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Recent Transactions */}
+      <div className="glass-card p-6 animate-fade-in">
+        <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Recent Transactions</h3>
+        {recentTransactions.length === 0 ? (
+          <p className="text-slate-500 dark:text-slate-400 text-center py-8">No transactions yet. Add your first transaction!</p>
+        ) : (
+          <div className="space-y-3">
+            {recentTransactions.map((transaction) => {
+              const category = categories.find((c) => c.name === transaction.category);
+              return (
+                <div
+                  key={transaction.id}
+                  className="flex items-center justify-between p-4 rounded-xl bg-white/50 dark:bg-slate-700/50 hover:bg-white/80 dark:hover:bg-slate-700/80 transition-all duration-300"
+                >
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+                      style={{ backgroundColor: `${category?.color}20` }}
+                    >
+                      {category?.icon || '📦'}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-slate-800 dark:text-white">{transaction.description || transaction.category}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{transaction.category}</p>
+                        {transaction.walletId && (
+                          <>
+                            <span className="text-slate-300 dark:text-slate-600">•</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400" style={{ backgroundColor: `${wallets.find(w => w.id === transaction.walletId)?.color}20` }}>
+                              {wallets.find(w => w.id === transaction.walletId)?.icon} {wallets.find(w => w.id === transaction.walletId)?.name || 'Wallet'}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`text-lg font-bold ${transaction.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                    {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount, currency)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+

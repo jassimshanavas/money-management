@@ -1,0 +1,170 @@
+// Prisma schema for Money Tracker
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  avatar        String?
+  currency      String    @default("USD")
+  darkMode      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  transactions  Transaction[]
+  budgets       Budget[]
+  goals         Goal[]
+  wallets       Wallet[]
+  recurring     RecurringTransaction[]
+  receipts      Receipt[]
+  sharedExpenses SharedExpense[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String
+  walletId    String?
+  type        String   // 'income' or 'expense'
+  category    String
+  amount      Float
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wallet      Wallet?  @relation(fields: [walletId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([date])
+  @@map("transactions")
+}
+
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@index([userId])
+  @@map("budgets")
+}
+
+model Goal {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  targetAmount Float
+  targetDate  DateTime?
+  category    String
+  achieved    Boolean  @default(false)
+  notified    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("goals")
+}
+
+model Wallet {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String
+  icon      String
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("wallets")
+}
+
+model RecurringTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  description String
+  category  String
+  amount    Float
+  frequency String   // 'weekly', 'monthly', 'yearly'
+  nextDue   DateTime
+  reminder  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("recurring_transactions")
+}
+
+model Receipt {
+  id        String   @id @default(cuid())
+  userId    String
+  file      String   // URL or base64
+  merchant  String?
+  total     Float?
+  category  String?
+  uploadedAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("receipts")
+}
+
+model SharedExpense {
+  id          String   @id @default(cuid())
+  userId      String
+  description String
+  totalAmount Float
+  category    String
+  date        DateTime
+  participants Json    // Array of {name, amount, paid}
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("shared_expenses")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // 'info', 'warning', 'success', 'error'
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
+
