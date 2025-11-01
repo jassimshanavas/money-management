@@ -21,6 +21,7 @@ import SharedExpenses from './components/SharedExpenses';
 import TaxEstimator from './components/TaxEstimator';
 import MonthlyReports from './components/MonthlyReports';
 import Notifications from './components/Notifications';
+import Profile from './components/Profile';
 import {
   LayoutDashboard,
   Plus,
@@ -37,6 +38,7 @@ import {
   Calculator,
   FileText,
   Bell,
+  User as UserIcon,
 } from 'lucide-react';
 
 const views = {
@@ -56,6 +58,7 @@ const views = {
   tax: { component: TaxEstimator, icon: Calculator, label: 'Tax' },
   reports: { component: MonthlyReports, icon: FileText, label: 'Reports' },
   notifications: { component: Notifications, icon: Bell, label: 'Notifications' },
+  profile: { component: Profile, icon: UserIcon, label: 'Profile' },
   settings: { component: Settings, icon: SettingsIcon, label: 'Settings' },
 };
 

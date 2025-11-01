@@ -53,28 +53,28 @@ export default function Dashboard() {
     .slice(0, 5);
 
   return (
-    <div className="pt-20 md:pt-8 px-4 md:px-8 max-w-7xl mx-auto pb-8">
-      <div className="mb-8 animate-fade-in">
-        <h1 className="text-4xl font-bold mb-2 text-slate-800 dark:text-white">Dashboard</h1>
-        <p className="text-slate-600 dark:text-slate-400">
+    <div className="pt-20 md:pt-8 px-3 sm:px-4 md:px-8 max-w-7xl mx-auto pb-20 md:pb-8">
+      <div className="mb-4 sm:mb-6 md:mb-8 animate-fade-in">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 text-slate-800 dark:text-white">Dashboard</h1>
+        <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
           {activeWalletView === 'all' 
-            ? "Welcome back! Here's your financial overview across all wallets."
+            ? "Welcome back! Here's your financial overview."
             : `Viewing ${wallets.find(w => w.id === activeWalletView)?.name || 'wallet'} transactions.`}
         </p>
       </div>
 
       {/* Wallet Cards Section */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Your Wallets</h2>
+      <div className="mb-4 sm:mb-6 md:mb-8">
+        <div className="flex items-center justify-between mb-3 sm:mb-4">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white">Your Wallets</h2>
           <button
             onClick={() => setActiveWalletView(activeWalletView === 'all' ? selectedWallet : 'all')}
-            className="text-sm text-teal-600 dark:text-cyan-400 hover:text-teal-700 dark:hover:text-cyan-300 font-medium"
+            className="text-xs sm:text-sm text-teal-600 dark:text-cyan-400 hover:text-teal-700 dark:hover:text-cyan-300 font-medium px-2 py-1"
           >
-            {activeWalletView === 'all' ? 'View Active Wallet' : 'View All Wallets'}
+            {activeWalletView === 'all' ? 'Active' : 'All'}
           </button>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
           {walletsWithBalance.map((wallet, index) => {
             const isActive = activeWalletView === wallet.id;
             const isSelected = selectedWallet === wallet.id;
@@ -85,7 +85,7 @@ export default function Dashboard() {
                   setActiveWalletView(wallet.id);
                   setSelectedWallet(wallet.id);
                 }}
-                className={`glass-card p-5 cursor-pointer transition-all duration-300 transform hover:scale-105 animate-slide-up group ${
+                className={`glass-card p-3 sm:p-4 md:p-5 cursor-pointer transition-all duration-300 transform hover:scale-105 animate-slide-up group ${
                   isActive ? 'ring-2 ring-teal-500 dark:ring-cyan-500 shadow-2xl' : 'hover:shadow-xl'
                 }`}
                 style={{ 
@@ -93,34 +93,34 @@ export default function Dashboard() {
                   borderLeft: `4px solid ${wallet.color}`
                 }}
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-lg group-hover:scale-110 transition-transform"
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-xl sm:text-2xl shadow-lg group-hover:scale-110 transition-transform"
                       style={{ backgroundColor: `${wallet.color}20` }}
                     >
                       {wallet.icon}
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-800 dark:text-white">{wallet.name}</h3>
+                      <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-white">{wallet.name}</h3>
                       {isSelected && (
-                        <span className="text-xs text-teal-600 dark:text-cyan-400 font-medium">Active</span>
+                        <span className="text-[10px] sm:text-xs text-teal-600 dark:text-cyan-400 font-medium">Active</span>
                       )}
                     </div>
                   </div>
                   <CreditCard 
-                    size={20} 
-                    className={`transition-colors ${isActive ? 'text-teal-500 dark:text-cyan-400' : 'text-slate-400'}`} 
+                    size={18} 
+                    className={`hidden sm:block transition-colors ${isActive ? 'text-teal-500 dark:text-cyan-400' : 'text-slate-400'}`} 
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5 sm:space-y-2">
                   <div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Balance</p>
-                    <p className="text-2xl font-bold text-slate-800 dark:text-white">
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mb-0.5 sm:mb-1">Balance</p>
+                    <p className="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 dark:text-white">
                       {formatCurrency(wallet.calculatedBalance, currency)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs">
+                  <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
                     <div>
                       <span className="text-slate-500 dark:text-slate-400">Income: </span>
                       <span className="text-green-500 font-medium">{formatCurrency(wallet.income, currency)}</span>
@@ -130,8 +130,8 @@ export default function Dashboard() {
                       <span className="text-red-500 font-medium">{formatCurrency(wallet.expenses, currency)}</span>
                     </div>
                   </div>
-                  <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                  <div className="pt-1.5 sm:pt-2 border-t border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
                       {wallet.transactionCount} transaction{wallet.transactionCount !== 1 ? 's' : ''}
                     </span>
                   </div>
@@ -142,66 +142,66 @@ export default function Dashboard() {
         </div>
         
         {/* Total Balance Card */}
-        <div className="glass-card p-6 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 border-teal-200 dark:border-teal-800 animate-fade-in">
+        <div className="glass-card p-4 sm:p-5 md:p-6 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 border-teal-200 dark:border-teal-800 animate-fade-in">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-slate-600 dark:text-slate-400 mb-1">Total Balance Across All Wallets</p>
-              <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mb-1">Total Balance</p>
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">
                 {formatCurrency(totalBalance, currency)}
               </h2>
             </div>
-            <Wallet className="text-teal-600 dark:text-cyan-400" size={32} />
+            <Wallet className="text-teal-600 dark:text-cyan-400 w-6 h-6 sm:w-8 sm:h-8" />
           </div>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="glass-card p-6 animate-slide-up hover:shadow-2xl transition-all duration-300">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center shadow-lg">
-              <Wallet className="text-white" size={24} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6 mb-4 sm:mb-6 md:mb-8">
+        <div className="glass-card p-4 sm:p-5 md:p-6 animate-slide-up hover:shadow-2xl transition-all duration-300">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center shadow-lg">
+              <Wallet className="text-white w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <TrendingUp className="text-green-500" size={20} />
+            <TrendingUp className="text-green-500 w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">Total Balance</p>
-          <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+          <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm mb-1">Total Balance</p>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">
             {formatCurrency(balance, currency)}
           </h2>
         </div>
 
-        <div className="glass-card p-6 animate-slide-up hover:shadow-2xl transition-all duration-300" style={{ animationDelay: '0.1s' }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center shadow-lg">
-              <ArrowUpCircle className="text-white" size={24} />
+        <div className="glass-card p-4 sm:p-5 md:p-6 animate-slide-up hover:shadow-2xl transition-all duration-300" style={{ animationDelay: '0.1s' }}>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center shadow-lg">
+              <ArrowUpCircle className="text-white w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <span className="text-green-500 font-semibold">+{formatCurrency(income, currency)}</span>
+            <span className="text-green-500 font-semibold text-xs sm:text-sm">+{formatCurrency(income, currency)}</span>
           </div>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">Monthly Income</p>
-          <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+          <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm mb-1">Monthly Income</p>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">
             {formatCurrency(income, currency)}
           </h2>
         </div>
 
-        <div className="glass-card p-6 animate-slide-up hover:shadow-2xl transition-all duration-300" style={{ animationDelay: '0.2s' }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-400 to-rose-500 flex items-center justify-center shadow-lg">
-              <ArrowDownCircle className="text-white" size={24} />
+        <div className="glass-card p-4 sm:p-5 md:p-6 animate-slide-up hover:shadow-2xl transition-all duration-300" style={{ animationDelay: '0.2s' }}>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-red-400 to-rose-500 flex items-center justify-center shadow-lg">
+              <ArrowDownCircle className="text-white w-5 h-5 sm:w-6 sm:h-6" />
             </div>
-            <span className="text-red-500 font-semibold">-{formatCurrency(expenses, currency)}</span>
+            <span className="text-red-500 font-semibold text-xs sm:text-sm">-{formatCurrency(expenses, currency)}</span>
           </div>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mb-1">Monthly Expenses</p>
-          <h2 className="text-3xl font-bold text-slate-800 dark:text-white">
+          <p className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm mb-1">Monthly Expenses</p>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">
             {formatCurrency(expenses, currency)}
           </h2>
         </div>
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="glass-card p-6 animate-fade-in">
-          <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Income vs Expenses (7 Days)</h3>
-          <ResponsiveContainer width="100%" height={300}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 md:gap-6 mb-4 sm:mb-6 md:mb-8">
+        <div className="glass-card p-4 sm:p-5 md:p-6 animate-fade-in">
+          <h3 className="text-base sm:text-lg md:text-xl font-semibold mb-3 sm:mb-4 text-slate-800 dark:text-white">Income vs Expenses (7 Days)</h3>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart data={last7Days}>
               <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.3} />
               <XAxis dataKey="date" stroke="#64748b" />
@@ -234,9 +234,9 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        <div className="glass-card p-6 animate-fade-in">
-          <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Monthly Comparison</h3>
-          <ResponsiveContainer width="100%" height={300}>
+        <div className="glass-card p-4 sm:p-5 md:p-6 animate-fade-in">
+          <h3 className="text-base sm:text-lg md:text-xl font-semibold mb-3 sm:mb-4 text-slate-800 dark:text-white">Monthly Comparison</h3>
+          <ResponsiveContainer width="100%" height={250}>
             <BarChart data={[{ name: 'Income', value: income }, { name: 'Expenses', value: expenses }]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.3} />
               <XAxis dataKey="name" stroke="#64748b" />
@@ -256,34 +256,34 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Transactions */}
-      <div className="glass-card p-6 animate-fade-in">
-        <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Recent Transactions</h3>
+      <div className="glass-card p-4 sm:p-5 md:p-6 animate-fade-in">
+        <h3 className="text-base sm:text-lg md:text-xl font-semibold mb-3 sm:mb-4 text-slate-800 dark:text-white">Recent Transactions</h3>
         {recentTransactions.length === 0 ? (
-          <p className="text-slate-500 dark:text-slate-400 text-center py-8">No transactions yet. Add your first transaction!</p>
+          <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 text-center py-6 sm:py-8">No transactions yet. Add your first transaction!</p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2 sm:space-y-3">
             {recentTransactions.map((transaction) => {
               const category = categories.find((c) => c.name === transaction.category);
               return (
                 <div
                   key={transaction.id}
-                  className="flex items-center justify-between p-4 rounded-xl bg-white/50 dark:bg-slate-700/50 hover:bg-white/80 dark:hover:bg-slate-700/80 transition-all duration-300"
+                  className="flex items-center justify-between p-3 sm:p-4 rounded-xl bg-white/50 dark:bg-slate-700/50 hover:bg-white/80 dark:hover:bg-slate-700/80 transition-all duration-300"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0">
                     <div
-                      className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-lg sm:text-xl md:text-2xl flex-shrink-0"
                       style={{ backgroundColor: `${category?.color}20` }}
                     >
                       {category?.icon || '📦'}
                     </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-slate-800 dark:text-white">{transaction.description || transaction.category}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <p className="text-sm text-slate-500 dark:text-slate-400">{transaction.category}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm sm:text-base text-slate-800 dark:text-white truncate">{transaction.description || transaction.category}</p>
+                      <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1 flex-wrap">
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{transaction.category}</p>
                         {transaction.walletId && (
                           <>
                             <span className="text-slate-300 dark:text-slate-600">•</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400" style={{ backgroundColor: `${wallets.find(w => w.id === transaction.walletId)?.color}20` }}>
+                            <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400 truncate max-w-[100px] sm:max-w-none" style={{ backgroundColor: `${wallets.find(w => w.id === transaction.walletId)?.color}20` }}>
                               {wallets.find(w => w.id === transaction.walletId)?.icon} {wallets.find(w => w.id === transaction.walletId)?.name || 'Wallet'}
                             </span>
                           </>
@@ -291,7 +291,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className={`text-lg font-bold ${transaction.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                  <div className={`text-base sm:text-lg font-bold ml-2 sm:ml-4 flex-shrink-0 ${transaction.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
                     {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount, currency)}
                   </div>
                 </div>

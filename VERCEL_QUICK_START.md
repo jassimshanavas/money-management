@@ -36,9 +36,19 @@ VITE_GEMINI_API_KEY
 ### 4. Deploy!
 Click **"Deploy"** and wait 1-2 minutes.
 
-### 5. Update Firebase Auth Domains
-1. Firebase Console → Authentication → Settings
-2. Add your Vercel domain: `your-project.vercel.app`
+### 5. Update Firebase Auth Domains ⚠️ CRITICAL!
+**This fixes Google sign-in errors!**
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Select your project
+3. Click **Authentication** → **Settings** (gear icon)
+4. Scroll to **Authorized domains**
+5. Click **Add domain**
+6. Enter: `your-project-name.vercel.app` (exact name from Vercel)
+7. Click **Add**
+8. **No redeploy needed** - works immediately!
+
+💡 **See `FIX_FIREBASE_AUTH_DOMAIN.md` for detailed help!**
 
 ## ✅ That's it! Your app is live!
 

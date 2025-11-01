@@ -8,7 +8,7 @@ const navigationGroups = {
   'Core': ['dashboard', 'add', 'history', 'categories', 'budget'],
   'Intelligence': ['insights', 'smartBudget', 'forecasting', 'goals'],
   'Tools': ['scanner', 'recurring', 'wallets', 'shared', 'tax', 'reports'],
-  'Other': ['notifications', 'settings'],
+  'Other': ['notifications', 'profile', 'settings'],
 };
 
 // Main Navigation component
@@ -192,7 +192,7 @@ export default function Navigation({ currentView, setCurrentView, views }) {
 
       {/* Bottom Navigation Bar - Mobile */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass-card border-t border-slate-200/50 dark:border-slate-700/50 safe-area-inset-bottom">
-        <div className="flex items-center justify-around py-2 px-1 overflow-x-auto">
+        <div className="flex items-center justify-around py-1.5 sm:py-2 px-1 overflow-x-auto">
           {['dashboard', 'add', 'history', 'categories', 'budget', 'notifications'].map((key) => {
             const { icon: Icon, label } = views[key] || {};
             if (!Icon) return null;
@@ -202,16 +202,16 @@ export default function Navigation({ currentView, setCurrentView, views }) {
               <button
                 key={key}
                 onClick={() => setCurrentView(key)}
-                className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all duration-300 min-w-[60px] relative ${
+                className={`flex flex-col items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-xl transition-all duration-300 min-w-[50px] sm:min-w-[60px] relative ${
                   currentView === key
                     ? 'text-teal-500 dark:text-teal-400'
                     : 'text-slate-500 dark:text-slate-400'
                 }`}
               >
-                <Icon size={20} />
-                <span className="text-xs font-medium">{label}</span>
+                <Icon size={18} className="sm:w-5 sm:h-5" />
+                <span className="text-[10px] sm:text-xs font-medium leading-tight">{label}</span>
                 {isNotifications && unreadCount > 0 && (
-                  <span className="absolute top-0 right-2 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                  <span className="absolute top-0 right-1 sm:right-2 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-red-500 rounded-full flex items-center justify-center text-white text-[9px] sm:text-[10px] font-bold">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}

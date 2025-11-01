@@ -26,15 +26,29 @@
 ## Post-Deployment Checklist
 
 - [ ] App loads successfully at Vercel URL
+- [ ] **🔥 CRITICAL: Firebase authorized domains updated** (see below)
 - [ ] Firebase Authentication works
-- [ ] Sign up/Sign in functional
+- [ ] **Google sign-in tested and working** ✅
+- [ ] Email/password sign up/Sign in functional
 - [ ] Can add transactions
 - [ ] Dashboard displays correctly
 - [ ] Dark mode toggle works
-- [ ] Firebase authorized domains updated
 - [ ] Firestore security rules reviewed
 - [ ] (Optional) Custom domain configured
 - [ ] (Optional) Analytics set up
+
+### ⚠️ Firebase Authorized Domains - REQUIRED!
+
+**If you see `auth/unauthorized-domain` error, do this:**
+
+1. Firebase Console → Authentication → Settings
+2. Scroll to "Authorized domains"
+3. Click "Add domain"
+4. Add: `your-project-name.vercel.app` (from Vercel dashboard)
+5. Click Add
+6. Test Google sign-in again
+
+**See `FIX_FIREBASE_AUTH_DOMAIN.md` for detailed instructions!**
 
 ## Firebase Configuration
 

@@ -97,10 +97,21 @@ VITE_GEMINI_API_KEY=your_gemini_api_key
 
 ### Update Firebase Authentication Domains:
 
-1. Go to Firebase Console → **Authentication** → **Settings**
-2. Under **Authorized domains**, make sure your Vercel domain is added:
-   - `your-project.vercel.app` (automatically added)
-   - Your custom domain (if you have one)
+⚠️ **CRITICAL STEP** - This fixes the `auth/unauthorized-domain` error!
+
+1. Go to Firebase Console → **Authentication** → **Settings** (gear icon)
+2. Scroll down to **Authorized domains** section
+3. Click **"Add domain"** button
+4. Enter your Vercel domain exactly as shown in your Vercel dashboard:
+   - Format: `your-project-name.vercel.app`
+   - Example: `money-tracker.vercel.app`
+5. Click **Add** (no verification needed)
+6. **Important**: Also add any preview/development domains:
+   - Production: `your-project.vercel.app`
+   - Preview deployments: May need to add individually if using Git branches
+   - Custom domain: If you configured one
+
+**Note**: Changes take effect immediately - no redeploy needed!
 
 ### Update Firestore Security Rules:
 
