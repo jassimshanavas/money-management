@@ -80,10 +80,10 @@ export default function Navigation({ currentView, setCurrentView, views }) {
       {sidebarOpen && (
         <>
           <div
-            className="md:hidden fixed inset-0 bg-black/50 z-50 transition-opacity"
+            className="md:hidden fixed inset-0 bg-black/50 z-[60] transition-opacity"
             onClick={() => setSidebarOpen(false)}
           />
-          <aside className="md:hidden fixed left-0 top-0 bottom-0 w-80 bg-white dark:bg-slate-900 z-50 shadow-2xl overflow-y-auto">
+          <aside className="md:hidden fixed left-0 top-0 bottom-0 w-80 bg-white dark:bg-slate-900 z-[70] shadow-2xl overflow-y-auto">
             <MobileSidebar
               currentView={currentView}
               setCurrentView={setCurrentView}
@@ -100,27 +100,12 @@ export default function Navigation({ currentView, setCurrentView, views }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 glass-card border-r border-slate-200/50 dark:border-slate-700/50 z-40 flex-col">
         <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-white font-bold text-xl shadow-lg">
               💰
             </div>
             <h1 className="text-xl font-bold gradient-text">Money Tracker</h1>
           </div>
-          
-          {/* User Info */}
-          {user && (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-white/50 dark:bg-slate-700/50">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">
-                <User size={16} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-800 dark:text-white truncate">
-                  {user.displayName || user.email}
-                </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Signed in</p>
-              </div>
-            </div>
-          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-1">
@@ -169,23 +154,53 @@ export default function Navigation({ currentView, setCurrentView, views }) {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-slate-200/50 dark:border-slate-700/50 space-y-2">
-          <button
-            onClick={toggleDarkMode}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 transition-all duration-200"
-          >
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-            <span className="font-medium">Toggle Theme</span>
-          </button>
-          
-          {user && (
+        <div className="border-t border-slate-200/50 dark:border-slate-700/50">
+          <div className="p-4 space-y-2">
             <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-all duration-200"
+              onClick={toggleDarkMode}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300 transition-all duration-200"
             >
-              <LogOut size={20} />
-              <span className="font-medium">Logout</span>
+              {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+              <span className="font-medium">Toggle Theme</span>
             </button>
+            
+            {user && (
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-all duration-200"
+              >
+                <LogOut size={20} />
+                <span className="font-medium">Logout</span>
+              </button>
+            )}
+          </div>
+          
+          {/* User Info at Bottom */}
+          {user && (
+            <div className="p-4 border-t border-slate-200/50 dark:border-slate-700/50">
+              <button
+                onClick={() => setCurrentView('profile')}
+                className="w-full flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-white/80 to-slate-50/80 dark:from-slate-700/80 dark:to-slate-800/80 hover:from-white dark:hover:from-slate-700 dark:hover:to-slate-800 border border-slate-200/50 dark:border-slate-600/50 shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                {user.photoURL ? (
+                  <img 
+                    src={user.photoURL} 
+                    alt={user.displayName || 'User'} 
+                    className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-slate-600 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+                    {user.displayName ? user.displayName.charAt(0).toUpperCase() : <User size={20} />}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">
+                    {user.displayName || 'User'}
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+                </div>
+              </button>
+            </div>
           )}
         </div>
       </aside>
@@ -239,7 +254,7 @@ function MobileSidebar({ currentView, setCurrentView, views, unreadCount, onClos
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
         <h2 className="text-lg font-bold text-slate-800 dark:text-white">Menu</h2>
         <button
           onClick={onClose}
@@ -248,23 +263,6 @@ function MobileSidebar({ currentView, setCurrentView, views, unreadCount, onClos
           <X size={24} />
         </button>
       </div>
-
-      {/* User Info - Mobile */}
-      {user && (
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-white/50 dark:bg-slate-700/50">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-white font-bold">
-              <User size={20} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800 dark:text-white truncate">
-                {user.displayName || user.email}
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Signed in</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       <nav className="flex-1 overflow-y-auto p-4 space-y-1">
         {Object.entries(navigationGroups).map(([groupName, viewKeys]) => (
@@ -315,21 +313,50 @@ function MobileSidebar({ currentView, setCurrentView, views, unreadCount, onClos
         ))}
       </nav>
 
-      {/* Logout Button - Mobile */}
-      {user && (
-        <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-          <button
-            onClick={() => {
-              onLogout();
-              onClose();
-            }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-200"
-          >
-            <LogOut size={20} />
-            <span className="font-medium">Logout</span>
-          </button>
-        </div>
-      )}
+      {/* Bottom Section - Mobile */}
+      <div className="border-t border-slate-200 dark:border-slate-700 flex-shrink-0">
+        {user && (
+          <div className="p-4">
+            <button
+              onClick={() => {
+                onLogout();
+                onClose();
+              }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-200 mb-3"
+            >
+              <LogOut size={20} />
+              <span className="font-medium">Logout</span>
+            </button>
+            
+            {/* User Info at Bottom - Mobile */}
+            <button
+              onClick={() => {
+                setCurrentView('profile');
+                onClose();
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-white/80 to-slate-50/80 dark:from-slate-700/80 dark:to-slate-800/80 border border-slate-200/50 dark:border-slate-600/50 shadow-md hover:shadow-lg transition-all duration-200"
+            >
+              {user.photoURL ? (
+                <img 
+                  src={user.photoURL} 
+                  alt={user.displayName || 'User'} 
+                  className="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-slate-600 shadow-sm"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center text-white font-bold shadow-sm">
+                  {user.displayName ? user.displayName.charAt(0).toUpperCase() : <User size={24} />}
+                </div>
+              )}
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-semibold text-slate-800 dark:text-white truncate">
+                  {user.displayName || 'User'}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
+              </div>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { useApp } from '../hooks/useAppContext';
 import { updateUserData, getUserData } from '../lib/firebase.userData';
 import { updateProfile } from 'firebase/auth';
 import { auth } from '../lib/firebase.config';
-import { User, Mail, Calendar, Edit2, Save, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Mail, Calendar, Edit2, Save, X, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
+import { logOut } from '../lib/firebase.auth';
 import { format } from 'date-fns';
 
 export default function Profile() {
@@ -74,6 +75,18 @@ export default function Profile() {
     }
     setIsEditing(false);
     setMessage({ type: '', text: '' });
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm('Are you sure you want to logout?')) {
+      try {
+        await logOut();
+        window.location.reload();
+      } catch (error) {
+        console.error('Error logging out:', error);
+        setMessage({ type: 'error', text: 'Failed to logout. Please try again.' });
+      }
+    }
   };
 
   // Calculate stats
@@ -169,13 +182,22 @@ export default function Profile() {
             </div>
           </div>
           {!isEditing && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="btn-secondary px-4 py-2 text-sm sm:text-base flex items-center gap-2"
-            >
-              <Edit2 size={16} />
-              <span>Edit Profile</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEditing(true)}
+                className="btn-secondary px-4 py-2 text-sm sm:text-base flex items-center gap-2"
+              >
+                <Edit2 size={16} />
+                <span>Edit Profile</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-sm sm:text-base flex items-center gap-2 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition"
+              >
+                <LogOut size={16} />
+                <span>Logout</span>
+              </button>
+            </div>
           )}
         </div>
 
