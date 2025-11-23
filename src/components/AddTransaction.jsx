@@ -17,6 +17,7 @@ export default function AddTransaction() {
     amount: '',
     description: '',
     walletId: selectedWallet,
+    date: new Date().toISOString().split('T')[0],
   });
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -38,6 +39,7 @@ export default function AddTransaction() {
       amount: '',
       description: '',
       walletId: selectedWallet,
+      date: new Date().toISOString().split('T')[0],
     });
 
     setShowSuccess(true);
@@ -174,6 +176,41 @@ export default function AddTransaction() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Date Selection */}
+          <div>
+            <label className="block text-xs sm:text-sm font-medium mb-2 sm:mb-3 text-slate-700 dark:text-slate-300">
+              Transaction Date
+            </label>
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, date: new Date().toISOString().split('T')[0] })}
+                className={`p-2 sm:p-3 rounded-xl transition-all duration-300 text-sm sm:text-base font-medium ${
+                  formData.date === new Date().toISOString().split('T')[0]
+                    ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
+                    : 'bg-white/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600'
+                }`}
+              >
+                Today
+              </button>
+              <div className={`rounded-xl transition-all duration-300 border ${
+                formData.date !== new Date().toISOString().split('T')[0]
+                  ? 'border-teal-500 bg-teal-50/50 dark:bg-teal-900/20'
+                  : 'border-slate-300 dark:border-slate-600'
+              }`}>
+                <input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl bg-transparent text-sm sm:text-base font-medium cursor-pointer text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-teal-500"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Selected: {new Date(formData.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </p>
           </div>
 
           {/* Category Selection */}
