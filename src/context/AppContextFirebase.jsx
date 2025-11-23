@@ -5,6 +5,23 @@ import { subscribe, create, update, remove, getAll, getUserDocuments } from '../
 
 export const AppContext = createContext();
 
+const normalizeWallet = (wallet) => {
+  if (!wallet) return { id: Date.now().toString(), name: 'Wallet', balance: 0, color: '#14b8a6', icon: '💼', type: 'cash', creditLimit: 0, billingDate: null, lastBillingDate: null, lastBilledAmount: 0 };
+  const type = wallet.type === 'credit' ? 'credit' : 'cash';
+  const balance = Number(wallet.balance ?? 0);
+  const creditLimitRaw = Number(wallet.creditLimit ?? 0);
+  const billingDate = type === 'credit' && wallet.billingDate ? Number(wallet.billingDate) : null;
+  return {
+    ...wallet,
+    type,
+    balance: Number.isFinite(balance) ? balance : 0,
+    creditLimit: type === 'credit' && Number.isFinite(creditLimitRaw) ? creditLimitRaw : 0,
+    billingDate: billingDate && billingDate >= 1 && billingDate <= 31 ? billingDate : null,
+    lastBillingDate: type === 'credit' ? (wallet.lastBillingDate || null) : null,
+    lastBilledAmount: type === 'credit' ? (Number(wallet.lastBilledAmount ?? 0) || 0) : 0,
+  };
+};
+
 const initialState = {
   user: null,
   userData: null,
@@ -23,7 +40,7 @@ const initialState = {
   },
   goals: [],
   wallets: [
-    { id: '1', name: 'Personal', balance: 0, color: '#14b8a6', icon: '💼' },
+    normalizeWallet({ id: '1', name: 'Personal', balance: 0, color: '#14b8a6', icon: '💼', type: 'cash', creditLimit: 0 }),
   ],
   recurringTransactions: [],
   sharedExpenses: [],
@@ -101,13 +118,13 @@ function appReducer(state, action) {
     case 'ADD_WALLET':
       return {
         ...state,
-        wallets: [...state.wallets, action.payload],
+        wallets: [...state.wallets, normalizeWallet(action.payload)],
       };
     case 'UPDATE_WALLET':
       return {
         ...state,
         wallets: state.wallets.map((w) =>
-          w.id === action.payload.id ? { ...w, ...action.payload.updates } : w
+          w.id === action.payload.id ? normalizeWallet({ ...w, ...action.payload.updates }) : w
         ),
       };
     case 'DELETE_WALLET':
@@ -218,7 +235,14 @@ function appReducer(state, action) {
         categories: action.payload,
       };
     case 'LOAD_DATA':
-      return { ...state, ...action.payload, dataLoading: false };
+      return { 
+        ...state, 
+        ...action.payload, 
+        dataLoading: false,
+        wallets: action.payload.wallets
+          ? action.payload.wallets.map(normalizeWallet)
+          : state.wallets,
+      };
     case 'SET_DATA_LOADING':
       return { ...state, dataLoading: action.payload };
     default:
@@ -640,7 +664,8 @@ export function AppProvider({ children }) {
       dispatch({ type: 'DELETE_GOAL', payload: id });
     },
     addWallet: async (wallet) => {
-      const walletData = { ...wallet, userId: state.user?.uid, balance: 0 };
+      const sanitized = normalizeWallet(wallet);
+      const walletData = { ...sanitized, userId: state.user?.uid };
       if (state.user) {
         const result = await create('wallets', walletData);
         dispatch({ type: 'ADD_WALLET', payload: result });

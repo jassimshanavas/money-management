@@ -100,13 +100,22 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Categories */}
+        {/* Expense Categories */}
         <div className="glass-card p-6 animate-slide-up">
-          <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Categories</h2>
+          <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Expense Categories</h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
             Manage your expense categories. Customize icons, colors, and names.
           </p>
-          <CategoryManager />
+          <CategoryManager type="expense" />
+        </div>
+
+        {/* Income Categories */}
+        <div className="glass-card p-6 animate-slide-up">
+          <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-white">Income Categories</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+            Manage your income categories. Customize icons, colors, and names.
+          </p>
+          <CategoryManager type="income" />
         </div>
 
         {/* Data Management */}

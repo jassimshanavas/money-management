@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../hooks/useAppContext';
-import { formatCurrency, getMonthlyTransactions, calculateTotals } from '../utils/helpers';
+import { formatCurrency, getMonthlyTransactions, calculateTotals, getWalletSummary } from '../utils/helpers';
 import { TrendingUp, TrendingDown, Wallet, ArrowUpCircle, ArrowDownCircle, CreditCard } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
@@ -20,12 +20,13 @@ export default function Dashboard() {
   const walletsWithBalance = wallets.map((wallet) => {
     const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
     const walletMonthlyTransactions = getMonthlyTransactions(walletTransactions);
-    const { income: wIncome, expenses: wExpenses, balance: wBalance } = calculateTotals(walletMonthlyTransactions);
+    const { income: monthlyIncome, expenses: monthlyExpenses } = calculateTotals(walletMonthlyTransactions);
+    const summary = getWalletSummary(wallet, transactions);
     return { 
-      ...wallet, 
-      income: wIncome, 
-      expenses: wExpenses, 
-      calculatedBalance: wBalance,
+      ...wallet,
+      ...summary,
+      income: monthlyIncome,
+      expenses: monthlyExpenses,
       transactionCount: walletTransactions.length
     };
   });
@@ -78,6 +79,10 @@ export default function Dashboard() {
           {walletsWithBalance.map((wallet, index) => {
             const isActive = activeWalletView === wallet.id;
             const isSelected = selectedWallet === wallet.id;
+            const isCreditCard = wallet.type === 'credit';
+            const outstanding = isCreditCard
+              ? wallet.creditUsed ?? Math.abs(wallet.calculatedBalance)
+              : null;
             return (
               <div
                 key={wallet.id}
@@ -103,9 +108,14 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <h3 className="font-bold text-sm sm:text-base text-slate-800 dark:text-white">{wallet.name}</h3>
-                      {isSelected && (
-                        <span className="text-[10px] sm:text-xs text-teal-600 dark:text-cyan-400 font-medium">Active</span>
-                      )}
+                      <div className="flex items-center gap-1">
+                        {isSelected && (
+                          <span className="text-[10px] sm:text-xs text-teal-600 dark:text-cyan-400 font-medium">Active</span>
+                        )}
+                        <span className="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 uppercase tracking-wide">
+                          {wallet.type === 'credit' ? 'Credit' : 'Wallet'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <CreditCard 
@@ -115,10 +125,21 @@ export default function Dashboard() {
                 </div>
                 <div className="space-y-1.5 sm:space-y-2">
                   <div>
-                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mb-0.5 sm:mb-1">Balance</p>
-                    <p className="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 dark:text-white">
-                      {formatCurrency(wallet.calculatedBalance, currency)}
+                    <p className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 mb-0.5 sm:mb-1">
+                      {isCreditCard ? 'Credit Limit Used' : 'Balance'}
                     </p>
+                    <div>
+                      <p className="text-lg sm:text-xl md:text-2xl font-bold text-slate-800 dark:text-white">
+                        {isCreditCard
+                          ? formatCurrency(outstanding || 0, currency)
+                          : formatCurrency(wallet.calculatedBalance, currency)}
+                      </p>
+                      {isCreditCard && (
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                          Net impact {formatCurrency(wallet.calculatedBalance, currency)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
                     <div>
@@ -130,6 +151,92 @@ export default function Dashboard() {
                       <span className="text-red-500 font-medium">{formatCurrency(wallet.expenses, currency)}</span>
                     </div>
                   </div>
+                  {isCreditCard && (
+                    <div className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span>Credit Limit Available</span>
+                        <span className="text-teal-600 dark:text-cyan-400 font-semibold">
+                          {formatCurrency(wallet.availableCredit ?? 0, currency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Limit</span>
+                        <span>{formatCurrency(wallet.creditLimit || 0, currency)}</span>
+                      </div>
+                      {wallet.hasUnpaidBill && wallet.unpaidBillAmount > 0 && (
+                        <div className="pt-1 border-t-2 border-red-300 dark:border-red-700 mt-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-red-600 dark:text-red-400 font-semibold">Unpaid Bill</span>
+                            <span className="text-red-600 dark:text-red-400 font-bold">
+                              {formatCurrency(wallet.unpaidBillAmount, currency)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {wallet.currentStatementBalance !== undefined && wallet.currentStatementBalance > 0 && wallet.dueDate && (
+                        <div className="pt-1 border-t border-slate-200 dark:border-slate-700 space-y-0.5">
+                          <div className="flex items-center justify-between">
+                            <span>Statement</span>
+                            <span className="font-semibold">{formatCurrency(wallet.currentStatementBalance, currency)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>Due</span>
+                            <span className={`font-semibold ${
+                              wallet.daysUntilDue !== null && wallet.daysUntilDue < 7
+                                ? 'text-red-500'
+                                : wallet.daysUntilDue !== null && wallet.daysUntilDue < 14
+                                ? 'text-yellow-500'
+                                : ''
+                            }`}>
+                              {wallet.dueDate instanceof Date ? wallet.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : new Date(wallet.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {wallet.daysUntilDue !== null && wallet.daysUntilDue < 14 && (
+                                <span className="ml-1">({wallet.daysUntilDue >= 0 ? `${wallet.daysUntilDue}d` : 'overdue'})</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {wallet.lastBilledAmount > 0 && (
+                        <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                          <span className="text-slate-500 dark:text-slate-400">Last Billed</span>
+                          <span className="text-red-600 dark:text-red-400 font-semibold">
+                            {formatCurrency(wallet.lastBilledAmount, currency)}
+                          </span>
+                        </div>
+                      )}
+                      {wallet.unbilledAmount !== undefined && wallet.unbilledAmount > 0 && (
+                        <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                          <span className="text-slate-500 dark:text-slate-400">Unbilled (New)</span>
+                          <span className="text-orange-600 dark:text-orange-400 font-semibold">
+                            {formatCurrency(wallet.unbilledAmount, currency)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 mt-1 overflow-hidden flex">
+                        {wallet.unpaidBillAmount > 0 && (
+                          <div
+                            className="h-full bg-red-500"
+                            style={{ width: `${Math.min(100, (wallet.unpaidBillAmount / wallet.creditLimit) * 100)}%` }}
+                            title={`Unpaid Bill: ${formatCurrency(wallet.unpaidBillAmount, currency)}`}
+                          />
+                        )}
+                        {wallet.unbilledAmount !== undefined && wallet.unbilledAmount > 0 && (
+                          <div
+                            className="h-full bg-orange-500"
+                            style={{ width: `${Math.min(100, (wallet.unbilledAmount / wallet.creditLimit) * 100)}%` }}
+                            title={`Unbilled: ${formatCurrency(wallet.unbilledAmount, currency)}`}
+                          />
+                        )}
+                        {wallet.availableCredit > 0 && (
+                          <div
+                            className="h-full bg-teal-500"
+                            style={{ width: `${Math.min(100, (wallet.availableCredit / wallet.creditLimit) * 100)}%` }}
+                            title={`Available: ${formatCurrency(wallet.availableCredit, currency)}`}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div className="pt-1.5 sm:pt-2 border-t border-slate-200 dark:border-slate-700">
                     <span className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400">
                       {wallet.transactionCount} transaction{wallet.transactionCount !== 1 ? 's' : ''}

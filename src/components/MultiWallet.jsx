@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../hooks/useAppContext';
-import { formatCurrency, calculateTotals } from '../utils/helpers';
-import { Wallet, Plus, Edit2, Trash2, CreditCard } from 'lucide-react';
+import { formatCurrency, getWalletSummary, isBetweenBillingAndDue, getBillingCycleDates, processBillingCycle } from '../utils/helpers';
+import { Wallet, Plus, Edit2, Trash2, CreditCard, Calendar, AlertCircle, DollarSign } from 'lucide-react';
+import PaymentModal from './PaymentModal';
 
 const walletColors = [
   { color: '#14b8a6', name: 'Teal' },
@@ -24,27 +25,125 @@ export default function MultiWallet() {
     updateWallet,
     deleteWallet,
     setSelectedWallet,
+    addTransaction,
   } = useApp();
-
+  // Move these hooks INSIDE the component function
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedWalletForPayment, setSelectedWalletForPayment] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     color: walletColors[0].color,
     icon: walletIcons[0],
+    type: 'cash',
+    balance: '',
+    creditLimit: '',
+    billingDate: '',
+    dueDateDuration: '20',
+    existingDebt: '', // For credit cards: existing credit limit used
+    lastBillPaid: '', // 'yes', 'no', or ''
+    lastBillAmount: '', // Amount if not paid
   });
+
+  // Check if we need to show bill payment questions
+  const [showBillQuestions, setShowBillQuestions] = useState(false);
+  
+  useEffect(() => {
+    if (formData.type === 'credit' && formData.billingDate) {
+      const billingDate = parseInt(formData.billingDate);
+      if (billingDate >= 1 && billingDate <= 31) {
+        const dueDateDuration = parseInt(formData.dueDateDuration) || 20;
+        const isBetween = isBetweenBillingAndDue(billingDate, null, dueDateDuration);
+        setShowBillQuestions(isBetween);
+      } else {
+        setShowBillQuestions(false);
+      }
+    } else {
+      setShowBillQuestions(false);
+    }
+  }, [formData.type, formData.billingDate, formData.dueDateDuration]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name) return;
+    if (formData.type === 'credit' && (!formData.creditLimit || !formData.billingDate)) {
+      alert('Credit cards require both credit limit and billing date');
+      return;
+    }
+    if (showBillQuestions && formData.lastBillPaid === '') {
+      alert('Please indicate if the last bill has been paid');
+      return;
+    }
+    if (showBillQuestions && formData.lastBillPaid === 'no' && !formData.lastBillAmount) {
+      alert('Please enter the billed amount if the bill is not paid');
+      return;
+    }
+
+    const parsedBalance = formData.type === 'cash' 
+      ? (Number.isFinite(parseFloat(formData.balance)) ? parseFloat(formData.balance) : 0)
+      : (Number.isFinite(parseFloat(formData.existingDebt)) ? parseFloat(formData.existingDebt) : 0);
+    const parsedLimit = parseFloat(formData.creditLimit);
+    const parsedBillingDate = parseInt(formData.billingDate);
+    const parsedDueDateDuration = parseInt(formData.dueDateDuration) || 20;
+    
+    // Calculate last billing date for credit cards
+    let lastBillingDate = null;
+    let lastBilledAmount = 0;
+    let finalBalance = parsedBalance;
+    
+    // For credit cards, always set lastBillingDate to enable unbilled calculation
+    if (formData.type === 'credit' && parsedBillingDate >= 1 && parsedBillingDate <= 31) {
+      const cycleDates = getBillingCycleDates(parsedBillingDate, null, parsedDueDateDuration);
+      if (cycleDates) {
+        lastBillingDate = cycleDates.lastBillingDate.toISOString();
+        
+        // If user answered bill questions and bill is not paid, set the billed amount
+        if (showBillQuestions && formData.lastBillPaid === 'no') {
+          lastBilledAmount = Number.isFinite(parseFloat(formData.lastBillAmount)) ? parseFloat(formData.lastBillAmount) : 0;
+          
+          // Last Billed Amount should be part of Existing Credit Limit Used
+          if (lastBilledAmount > 0) {
+            if (finalBalance > 0) {
+              // User entered both - ensure existing debt includes last billed amount
+              if (finalBalance < lastBilledAmount) {
+                finalBalance = lastBilledAmount;
+              }
+            } else {
+              // No existing debt entered, so last billed amount becomes the existing debt
+              finalBalance = lastBilledAmount;
+            }
+          }
+        }
+      }
+    }
 
     addWallet({
       name: formData.name,
       color: formData.color,
       icon: formData.icon,
-      balance: 0,
+      type: formData.type,
+      balance: finalBalance,
+      creditLimit: formData.type === 'credit' && Number.isFinite(parsedLimit) ? parsedLimit : 0,
+      billingDate: formData.type === 'credit' && parsedBillingDate >= 1 && parsedBillingDate <= 31 ? parsedBillingDate : null,
+      dueDateDuration: formData.type === 'credit' ? parsedDueDateDuration : null,
+      lastBillingDate: lastBillingDate,
+      lastBilledAmount: lastBilledAmount,
+      payments: [],
     });
 
-    setFormData({ name: '', color: walletColors[0].color, icon: walletIcons[0] });
+    setFormData({
+      name: '',
+      color: walletColors[0].color,
+      icon: walletIcons[0],
+      type: 'cash',
+      balance: '',
+      creditLimit: '',
+      billingDate: '',
+      dueDateDuration: '20',
+      existingDebt: '',
+      lastBillPaid: '',
+      lastBillAmount: '',
+    });
     setShowAddForm(false);
   };
 
@@ -61,11 +160,73 @@ export default function MultiWallet() {
     }
   };
 
+  const handlePayment = (amount) => {
+  if (!selectedWalletForPayment) return;
+
+  const wallet = selectedWalletForPayment;
+  const maxPayable = wallet.unpaidBillAmount || 0;
+  const isFullPayment = amount >= maxPayable;
+
+  // Reduce wallet balance by payment amount
+  const newBalance = Math.max(0, (wallet.balance || 0) - amount);
+
+  // Prepare wallet updates
+  const walletUpdates = {
+    balance: newBalance,
+    payments: [
+      ...(wallet.payments || []),
+      {
+        id: Date.now(),
+        amount: amount,
+        date: new Date().toISOString(),
+        billAmount: maxPayable,
+        type: isFullPayment ? 'full' : 'partial',
+      },
+    ],
+  };
+
+  // Update unpaid bill amount
+  if (isFullPayment) {
+    walletUpdates.unpaidBillAmount = 0;
+    walletUpdates.hasUnpaidBill = false;
+  } else {
+    const remainingUnpaid = maxPayable - amount;
+    walletUpdates.unpaidBillAmount = remainingUnpaid;
+    walletUpdates.hasUnpaidBill = true;
+  }
+
+  updateWallet(wallet.id, walletUpdates);
+
+  alert(
+    isFullPayment
+      ? `Full payment of ${formatCurrency(amount, currency)} recorded! Bill cleared.`
+      : `Partial payment of ${formatCurrency(amount, currency)} recorded. Remaining: ${formatCurrency(maxPayable - amount, currency)}`
+  );
+
+  setSelectedWalletForPayment(null);
+};
+
+  // Auto-process billing cycles
+  useEffect(() => {
+    const processCycles = () => {
+      wallets.forEach((wallet) => {
+        if (wallet.type === 'credit' && wallet.billingDate) {
+          const updates = processBillingCycle(wallet, transactions);
+          if (updates) {
+            updateWallet(wallet.id, updates);
+          }
+        }
+      });
+    };
+    
+    // Process on mount and when transactions change
+    processCycles();
+  }, [transactions.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Calculate balances for each wallet
   const walletsWithBalance = wallets.map((wallet) => {
-    const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
-    const { income, expenses, balance } = calculateTotals(walletTransactions);
-    return { ...wallet, income, expenses, calculatedBalance: balance };
+    const summary = getWalletSummary(wallet, transactions);
+    return { ...wallet, ...summary };
   });
 
   const totalBalance = walletsWithBalance.reduce((sum, w) => sum + w.calculatedBalance, 0);
@@ -123,7 +284,7 @@ export default function MultiWallet() {
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
                   Color
@@ -142,6 +303,8 @@ export default function MultiWallet() {
                   ))}
                 </div>
               </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
                   Icon
@@ -161,7 +324,191 @@ export default function MultiWallet() {
                   ))}
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  Wallet Type
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Cash / Debit', value: 'cash', icon: '💼' },
+                    { label: 'Credit Card', value: 'credit', icon: '💳' },
+                  ].map((type) => (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, type: type.value })}
+                      className={`p-3 rounded-xl border-2 transition-all text-left ${
+                        formData.type === type.value
+                          ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="text-2xl mb-1">{type.icon}</div>
+                      <div className="text-sm font-semibold">{type.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
+            {formData.type === 'cash' ? (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  Starting Balance
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.balance}
+                  onChange={(e) => setFormData({ ...formData, balance: e.target.value })}
+                  className="input-field"
+                  placeholder="e.g., 1500"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Optional: pre-load the wallet with an existing balance.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                    Credit Limit <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.creditLimit}
+                    onChange={(e) => setFormData({ ...formData, creditLimit: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g., 5000"
+                    required
+                  />
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Maximum credit available on this card.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                    Billing Date (Day of Month) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={formData.billingDate}
+                    onChange={(e) => setFormData({ ...formData, billingDate: e.target.value })}
+                    className="input-field"
+                    placeholder="e.g., 15"
+                    required
+                  />
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    Day of month when your statement is generated (1-31).
+                  </p>
+                </div>
+              </div>
+            )}
+            {formData.type === 'credit' && (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  Due Date Duration (Days) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={formData.dueDateDuration}
+                  onChange={(e) => setFormData({ ...formData, dueDateDuration: e.target.value })}
+                  className="input-field"
+                  placeholder="e.g., 20"
+                  required
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Number of days after billing date when payment is due (default: 20 days).
+                </p>
+              </div>
+            )}
+            {formData.type === 'credit' && (
+              <div>
+                <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                  Existing Credit Limit Used (Optional)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.existingDebt}
+                  onChange={(e) => setFormData({ ...formData, existingDebt: e.target.value })}
+                  className="input-field"
+                  placeholder="e.g., 500"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Total outstanding balance on this card. If you have an unpaid bill below, this should include that amount. Leave empty if starting fresh.
+                </p>
+              </div>
+            )}
+            {showBillQuestions && (
+              <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800 space-y-4">
+                <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                  <AlertCircle size={20} />
+                  <span className="font-semibold">Bill Payment Status</span>
+                </div>
+                <p className="text-sm text-blue-600 dark:text-blue-400">
+                  You're currently between the billing date and due date. Please provide information about the last bill.
+                  <span className="block mt-1 font-semibold">Note: The unpaid bill amount will be automatically included in your "Existing Credit Limit Used" above.</span>
+                </p>
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                    Has the last bill been paid? <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, lastBillPaid: 'yes', lastBillAmount: '' })}
+                      className={`p-3 rounded-xl border-2 transition-all text-left ${
+                        formData.lastBillPaid === 'yes'
+                          ? 'border-green-500 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="text-xl mb-1">✅</div>
+                      <div className="text-sm font-semibold">Yes, Paid</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, lastBillPaid: 'no' })}
+                      className={`p-3 rounded-xl border-2 transition-all text-left ${
+                        formData.lastBillPaid === 'no'
+                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 text-slate-600 dark:text-slate-300'
+                      }`}
+                    >
+                      <div className="text-xl mb-1">❌</div>
+                      <div className="text-sm font-semibold">No, Not Paid</div>
+                    </button>
+                  </div>
+                </div>
+                {formData.lastBillPaid === 'no' && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+                      Last Billed Amount <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.lastBillAmount}
+                      onChange={(e) => setFormData({ ...formData, lastBillAmount: e.target.value })}
+                      className="input-field"
+                      placeholder="e.g., 500.00"
+                      required
+                    />
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      Enter the amount from your last statement that needs to be paid.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-4">
               <button type="submit" className="btn-primary">
                 Create Wallet
@@ -180,7 +527,12 @@ export default function MultiWallet() {
 
       {/* Wallets Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-        {walletsWithBalance.map((wallet, index) => (
+        {walletsWithBalance.map((wallet, index) => {
+          const isCreditCard = wallet.type === 'credit';
+          const outstanding = isCreditCard
+            ? wallet.creditUsed ?? Math.abs(wallet.calculatedBalance)
+            : null;
+          return (
           <div
             key={wallet.id}
             className={`glass-card p-6 cursor-pointer transition-all duration-300 animate-slide-up ${
@@ -204,6 +556,9 @@ export default function MultiWallet() {
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {selectedWallet === wallet.id ? 'Active' : 'Click to activate'}
                   </p>
+                    <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full mt-1 bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300">
+                      {isCreditCard ? 'Credit Card' : 'Wallet'}
+                    </span>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -233,31 +588,202 @@ export default function MultiWallet() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-600 dark:text-slate-400">Balance</span>
-                <span
-                  className={`text-xl font-bold ${
-                    wallet.calculatedBalance >= 0
-                      ? 'text-green-600 dark:text-green-400'
-                      : 'text-red-600 dark:text-red-400'
-                  }`}
-                >
-                  {formatCurrency(wallet.calculatedBalance, currency)}
+                <span className="text-sm text-slate-600 dark:text-slate-400">
+                  {isCreditCard ? 'Credit Limit Used' : 'Balance'}
                 </span>
+                <div className="text-right">
+                  <span
+                    className={`text-xl font-bold ${
+                      (isCreditCard ? outstanding : wallet.calculatedBalance) >= 0
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}
+                  >
+                    {isCreditCard
+                      ? formatCurrency(outstanding || 0, currency)
+                      : formatCurrency(wallet.calculatedBalance, currency)}
+                  </span>
+                  {isCreditCard && (
+                    <p className="text-xs text-slate-400 dark:text-slate-500">
+                      Net impact {formatCurrency(wallet.calculatedBalance, currency)}
+                    </p>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600 dark:text-slate-400">
-                  Income: <span className="text-green-600 dark:text-green-400 font-medium">
+                  Income:{' '}
+                  <span className="text-green-600 dark:text-green-400 font-medium">
                     {formatCurrency(wallet.income, currency)}
                   </span>
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600 dark:text-slate-400">
-                  Expenses: <span className="text-red-600 dark:text-red-400 font-medium">
+                  Expenses:{' '}
+                  <span className="text-red-600 dark:text-red-400 font-medium">
                     {formatCurrency(wallet.expenses, currency)}
                   </span>
                 </span>
               </div>
+              {isCreditCard && (
+                <div className="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>Credit Limit</span>
+                    <span className="font-semibold">
+                      {formatCurrency(wallet.creditLimit || 0, currency)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                    <span>Credit Limit Available</span>
+                    <span className="font-semibold text-teal-600 dark:text-teal-400">
+                      {formatCurrency(wallet.availableCredit ?? 0, currency)}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                      {wallet.unpaidBillAmount > 0 && (
+                        <div
+                          className="h-full bg-red-500"
+                          style={{ width: `${Math.min(100, (wallet.unpaidBillAmount / wallet.creditLimit) * 100)}%` }}
+                          title={`Unpaid Bill: ${formatCurrency(wallet.unpaidBillAmount, currency)}`}
+                        />
+                      )}
+                      {wallet.unbilledAmount !== undefined && wallet.unbilledAmount > 0 && (
+                        <div
+                          className="h-full bg-orange-500"
+                          style={{ width: `${Math.min(100, (wallet.unbilledAmount / wallet.creditLimit) * 100)}%` }}
+                          title={`Unbilled: ${formatCurrency(wallet.unbilledAmount, currency)}`}
+                        />
+                      )}
+                      {wallet.availableCredit > 0 && (
+                        <div
+                          className="h-full bg-teal-500"
+                          style={{ width: `${Math.min(100, (wallet.availableCredit / wallet.creditLimit) * 100)}%` }}
+                          title={`Available: ${formatCurrency(wallet.availableCredit, currency)}`}
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-slate-600 dark:text-slate-400 flex-wrap">
+                      {wallet.unpaidBillAmount > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                          <span>Unpaid Bill</span>
+                        </div>
+                      )}
+                      {wallet.unbilledAmount !== undefined && wallet.unbilledAmount > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                          <span>Unbilled</span>
+                        </div>
+                      )}
+                      {wallet.availableCredit > 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-2 h-2 rounded-full bg-teal-500"></div>
+                          <span>Available</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+    
+    {/* Billing Information */}
+                    <div className="pt-2 border-t border-slate-200 dark:border-slate-700 space-y-1.5">
+      {/* Only show Last Billed if there's a billed amount */}
+      {wallet.lastBilledAmount > 0 && (
+        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span>Last Billed</span>
+          <span>{formatCurrency(wallet.lastBilledAmount, currency)}</span>
+                      </div>
+      )}
+      
+      {/* Show Due Date ONLY if there's an unpaid bill */}
+      {wallet.hasUnpaidBill && wallet.unpaidBillAmount > 0 && wallet.dueDate && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                            <AlertCircle size={12} />
+                            Due Date
+                          </span>
+                          <span className={`font-semibold ${
+                            wallet.daysUntilDue !== null && wallet.daysUntilDue < 7
+                              ? 'text-red-600 dark:text-red-400'
+                              : wallet.daysUntilDue !== null && wallet.daysUntilDue < 14
+                              ? 'text-yellow-600 dark:text-yellow-400'
+                              : 'text-slate-800 dark:text-slate-200'
+                          }`}>
+                            {wallet.dueDate ? (wallet.dueDate instanceof Date ? wallet.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : new Date(wallet.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : 'N/A'}
+                            {wallet.daysUntilDue !== null && (
+                              <span className="ml-1 text-[10px]">
+                                ({wallet.daysUntilDue > 0 ? `${wallet.daysUntilDue}d left` : wallet.daysUntilDue === 0 ? 'Due today' : `${Math.abs(wallet.daysUntilDue)}d overdue`})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+      
+      {/* Show Current Statement (Unbilled) if there's unbilled amount */}
+                      {wallet.unbilledAmount !== undefined && wallet.unbilledAmount > 0 && (
+                        <div className="flex items-center justify-between text-xs">
+          <span className="text-slate-600 dark:text-slate-400 flex items-center gap-1">
+            <Calendar size={12} />
+            Current Statement
+          </span>
+          <span className="font-semibold text-orange-600 dark:text-orange-400">
+            {formatCurrency(wallet.currentStatementBalance, currency)}
+          </span>
+        </div>
+      )}
+      
+      {/* Show Next Billing Date */}
+      {wallet.nextBillingDate && (
+        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span>Next Billing</span>
+          <span>
+            {wallet.nextBillingDate ? (wallet.nextBillingDate instanceof Date ? wallet.nextBillingDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : new Date(wallet.nextBillingDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })) : 'N/A'}
+                          </span>
+                        </div>
+                      )}
+    </div>
+                    </div>
+                  )}
+
+{/* Unpaid Bill Section - Show ONLY when there's an unpaid bill */}
+{wallet.hasUnpaidBill && wallet.unpaidBillAmount > 0 && (
+  <div className="pt-2 border-t-2 border-red-300 dark:border-red-700 mt-2">
+    <div className="p-2 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+      <div className="flex items-center justify-between text-xs mb-2">
+        <span className="text-red-700 dark:text-red-300 font-semibold flex items-center gap-1">
+          <AlertCircle size={14} />
+          Unpaid Billed Amount
+        </span>
+        <span className="text-red-600 dark:text-red-400 font-bold">
+          {formatCurrency(wallet.unpaidBillAmount, currency)}
+        </span>
+      </div>
+
+      {wallet.unbilledAmount > 0 && (
+        <div className="flex items-center justify-between text-xs mb-2 text-slate-600 dark:text-slate-400">
+          <span>+ Unbilled (new spending)</span>
+          <span className="font-semibold text-orange-600 dark:text-orange-400">
+            {formatCurrency(wallet.unbilledAmount, currency)}
+          </span>
+        </div>
+      )}
+
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    setSelectedWalletForPayment(wallet);
+    setPaymentModalOpen(true);
+  }}
+  className="w-full mt-3 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-all flex items-center justify-center gap-2 shadow-md"
+>
+  <DollarSign size={16} />
+  Record Payment ({formatCurrency(wallet.unpaidBillAmount, currency)} due)
+</button>
+    </div>
+  </div>
+)}
+
             </div>
 
             {selectedWallet === wallet.id && (
@@ -269,8 +795,18 @@ export default function MultiWallet() {
               </div>
             )}
           </div>
-        ))}
+        );})}
       </div>
+            <PaymentModal
+  isOpen={paymentModalOpen}
+  onClose={() => {
+    setPaymentModalOpen(false);
+    setSelectedWalletForPayment(null);
+  }}
+  wallet={selectedWalletForPayment}
+  currency={currency}
+  onPayment={handlePayment}
+/>
     </div>
   );
 }

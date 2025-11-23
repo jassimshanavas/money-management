@@ -14,7 +14,7 @@ const availableColors = [
   '#06b6d4', '#6b7280', '#f97316', '#84cc16', '#eab308', '#6366f1'
 ];
 
-export default function CategoryManager() {
+export default function CategoryManager({ type = 'expense' }) {
   const { categories, addCategory, updateCategory, deleteCategory, transactions } = useApp();
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
@@ -23,7 +23,11 @@ export default function CategoryManager() {
     name: '',
     icon: '📦',
     color: '#6b7280',
+    type: type,
   });
+
+  // Filter categories by type
+  const filteredCategories = categories.filter((cat) => (cat.type || 'expense') === type);
 
   const handleAdd = async () => {
     if (!formData.name.trim()) {
@@ -32,8 +36,8 @@ export default function CategoryManager() {
     }
 
     try {
-      await addCategory({ ...formData, name: formData.name.trim() });
-      setFormData({ name: '', icon: '📦', color: '#6b7280' });
+      await addCategory({ ...formData, name: formData.name.trim(), type: type });
+      setFormData({ name: '', icon: '📦', color: '#6b7280', type: type });
       setShowAddForm(false);
       setError('');
     } catch (err) {
@@ -52,22 +56,23 @@ export default function CategoryManager() {
         name: formData.name.trim(),
         icon: formData.icon,
         color: formData.color,
-      });
+        type: type,
+      }, editingCategory.type || 'expense');
       setEditingCategory(null);
-      setFormData({ name: '', icon: '📦', color: '#6b7280' });
+      setFormData({ name: '', icon: '📦', color: '#6b7280', type: type });
       setError('');
     } catch (err) {
       setError(err.message || 'Failed to update category');
     }
   };
 
-  const handleDelete = async (categoryName) => {
+  const handleDelete = async (categoryName, categoryType) => {
     if (!window.confirm(`Delete category "${categoryName}"? This cannot be undone.`)) {
       return;
     }
 
     try {
-      await deleteCategory(categoryName);
+      await deleteCategory(categoryName, categoryType || type);
     } catch (err) {
       alert(err.message || 'Failed to delete category');
     }
@@ -79,6 +84,7 @@ export default function CategoryManager() {
       name: category.name,
       icon: category.icon,
       color: category.color,
+      type: category.type || 'expense',
     });
     setShowAddForm(false);
     setError('');
@@ -86,12 +92,12 @@ export default function CategoryManager() {
 
   const cancelEdit = () => {
     setEditingCategory(null);
-    setFormData({ name: '', icon: '📦', color: '#6b7280' });
+    setFormData({ name: '', icon: '📦', color: '#6b7280', type: type });
     setError('');
   };
 
   const getCategoryUsage = (categoryName) => {
-    return transactions.filter((t) => t.category === categoryName).length;
+    return transactions.filter((t) => t.category === categoryName && t.type === type).length;
   };
 
   return (
@@ -225,7 +231,7 @@ export default function CategoryManager() {
 
       {/* Categories List */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {categories.map((category) => {
+        {filteredCategories.map((category) => {
           const usageCount = getCategoryUsage(category.name);
           return (
             <div
@@ -258,7 +264,7 @@ export default function CategoryManager() {
                   </button>
                   {usageCount === 0 && (
                     <button
-                      onClick={() => handleDelete(category.name)}
+                      onClick={() => handleDelete(category.name, category.type || 'expense')}
                       className="p-1.5 rounded-lg bg-white/90 dark:bg-slate-800/90 hover:bg-red-500 text-red-500 hover:text-white shadow-sm transition-colors"
                       title="Delete category"
                     >
@@ -272,9 +278,9 @@ export default function CategoryManager() {
         })}
       </div>
 
-      {categories.length === 0 && (
+      {filteredCategories.length === 0 && (
         <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-          <p>No categories yet. Add your first category above!</p>
+          <p>No {type} categories yet. Add your first category above!</p>
         </div>
       )}
     </div>
