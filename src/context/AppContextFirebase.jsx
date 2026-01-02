@@ -353,12 +353,12 @@ export function AppProvider({ children }) {
         });
 
         // Process categories - merge default categories with user-created ones
-        const userCategoriesFromFirestore = categoriesData.map((c) => ({ name: c.name, icon: c.icon, color: c.color }));
+        const userCategoriesFromFirestore = categoriesData.map((c) => ({ name: c.name, icon: c.icon, color: c.color, type: c.type || 'expense' }));
         // Get default category names
         const defaultCategoryNames = initialState.categories.map(c => c.name);
         // Merge: keep defaults, add user-created ones that don't conflict
         const mergedCategories = [
-          ...initialState.categories, // Default categories first
+          ...initialState.categories.map(c => ({ ...c, type: c.type || 'expense' })), // Default categories first
           ...userCategoriesFromFirestore.filter(uc => !defaultCategoryNames.includes(uc.name)) // User categories that aren't defaults
         ];
         const userCategories = mergedCategories;
@@ -451,11 +451,11 @@ export function AppProvider({ children }) {
 
     const unsubscribeCategories = subscribe('categories', (data) => {
       // Merge user-created categories with default categories
-      const userCategoriesFromFirestore = data.map((c) => ({ name: c.name, icon: c.icon, color: c.color }));
+      const userCategoriesFromFirestore = data.map((c) => ({ name: c.name, icon: c.icon, color: c.color, type: c.type || 'expense' }));
       const defaultCategoryNames = initialState.categories.map(c => c.name);
       // Merge: keep defaults, add user-created ones that don't conflict
       const mergedCategories = [
-        ...initialState.categories, // Default categories first
+        ...initialState.categories.map(c => ({ ...c, type: c.type || 'expense' })), // Default categories first
         ...userCategoriesFromFirestore.filter(uc => !defaultCategoryNames.includes(uc.name)) // User categories that aren't defaults
       ];
       dispatch({ type: 'SET_CATEGORIES', payload: mergedCategories });

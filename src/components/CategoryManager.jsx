@@ -112,7 +112,10 @@ export default function CategoryManager({ type = 'expense' }) {
       {/* Add Category Button */}
       {!showAddForm && !editingCategory && (
         <button
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setFormData({ name: '', icon: '📦', color: '#6b7280', type: type });
+            setShowAddForm(true);
+          }}
           className="w-full btn-primary flex items-center justify-center gap-2"
         >
           <Plus size={20} />
