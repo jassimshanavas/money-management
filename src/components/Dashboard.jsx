@@ -37,9 +37,16 @@ export default function Dashboard() {
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const date = new Date();
     date.setDate(date.getDate() - (6 - i));
-    const dayTransactions = monthlyTransactions.filter(
-      (t) => new Date(t.date).toDateString() === date.toDateString()
-    );
+    date.setHours(0, 0, 0, 0);
+    const nextDay = new Date(date);
+    nextDay.setDate(nextDay.getDate() + 1);
+    
+    // Filter transactions from filteredTransactions (not monthlyTransactions) for the last 7 days
+    const dayTransactions = filteredTransactions.filter((t) => {
+      const transDate = new Date(t.date);
+      transDate.setHours(0, 0, 0, 0);
+      return transDate >= date && transDate < nextDay;
+    });
     const dayIncome = dayTransactions.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
     const dayExpenses = dayTransactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
     return {
