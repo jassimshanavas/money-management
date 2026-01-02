@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../hooks/useAppContext';
 import { formatCurrency, getWalletSummary } from '../utils/helpers';
 import { Plus, X } from 'lucide-react';
@@ -21,16 +21,46 @@ export default function AddTransaction() {
   });
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Sync walletId with selectedWallet when it changes
+  useEffect(() => {
+    if (selectedWallet && selectedWallet !== formData.walletId) {
+      setFormData(prev => ({
+        ...prev,
+        walletId: selectedWallet
+      }));
+    }
+  }, [selectedWallet]);
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.amount || parseFloat(formData.amount) <= 0) {
       return;
     }
 
+    // Ensure date is properly formatted
+    let transactionDate;
+    if (formData.date) {
+      // If date is in YYYY-MM-DD format, convert to ISO string
+      // If it's already an ISO string, use it as is
+      try {
+        const dateObj = new Date(formData.date);
+        if (isNaN(dateObj.getTime())) {
+          transactionDate = new Date().toISOString();
+        } else {
+          transactionDate = dateObj.toISOString();
+        }
+      } catch {
+        transactionDate = new Date().toISOString();
+      }
+    } else {
+      transactionDate = new Date().toISOString();
+    }
+
     addTransaction({
       ...formData,
       amount: parseFloat(formData.amount),
-      walletId: formData.walletId || selectedWallet,
+      walletId: String(formData.walletId || selectedWallet), // Ensure string type
+      date: transactionDate,
     });
 
     setFormData({

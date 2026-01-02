@@ -269,16 +269,40 @@ export function AppProvider({ children }) {
     dispatch,
     addTransaction: (transaction) => {
       // Ensure walletId is always set (use selected wallet if not provided)
-      const walletId = transaction.walletId || state.selectedWallet || state.wallets[0]?.id || '1';
+      const walletId = String(transaction.walletId || state.selectedWallet || state.wallets[0]?.id || '1');
+      
+      // Ensure date is in ISO format
+      let transactionDate = transaction.date;
+      if (transactionDate) {
+        try {
+          // If date is already ISO string, use it; otherwise convert
+          const dateObj = new Date(transactionDate);
+          if (!isNaN(dateObj.getTime())) {
+            transactionDate = dateObj.toISOString();
+          } else {
+            transactionDate = new Date().toISOString();
+          }
+        } catch {
+          transactionDate = new Date().toISOString();
+        }
+      } else {
+        transactionDate = new Date().toISOString();
+      }
+      
+      const newTransaction = {
+        ...transaction,
+        walletId: walletId, // Always ensure walletId is set as string
+        id: Date.now(),
+        date: transactionDate,
+        type: transaction.type || 'expense',
+        amount: Number(transaction.amount) || 0,
+        category: transaction.category || '',
+        description: transaction.description || '',
+      };
       
       dispatch({
         type: 'ADD_TRANSACTION',
-        payload: { 
-          ...transaction, 
-          walletId: walletId, // Always ensure walletId is set
-          id: Date.now(), 
-          date: new Date().toISOString() 
-        },
+        payload: newTransaction,
       });
     },
     updateTransaction: (id, updates) => {

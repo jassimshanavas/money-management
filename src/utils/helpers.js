@@ -205,7 +205,7 @@ export const getCurrentBillingCycleTransactions = (transactions, billingDate, la
 //   // Check if billing date has arrived
 //   if (isAfter(today, nextBilling) || today.getTime() === nextBilling.getTime()) {
 //     // Get all transactions for this wallet
-//     const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
+//     const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
     
 //     // Calculate unbilled amount (transactions after last billing date)
 //     const lastBilling = new Date(cycleDates.lastBillingDate);
@@ -360,7 +360,7 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 //     };
 //   }
 
-//   const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
+//   const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
 //   const { income, expenses } = calculateTotals(walletTransactions);
 //   const initialBalance = Number(wallet.balance ?? 0) || 0;
 //   const walletType = wallet.type || 'cash';
@@ -456,7 +456,7 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 //     };
 //   }
 
-//   const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
+//   const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
 //   const { income, expenses } = calculateTotals(walletTransactions);
 //   const initialBalance = Number(wallet.balance ?? 0) || 0;
 //   const walletType = wallet.type || 'cash';
@@ -577,7 +577,7 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 //     };
 //   }
 
-//   const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
+//   const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
 //   const { income, expenses } = calculateTotals(walletTransactions);
 //   const initialBalance = Number(wallet.balance ?? 0) || 0;
 //   const walletType = wallet.type || 'cash';
@@ -695,7 +695,7 @@ export const getWalletSummary = (wallet, transactions) => {
     };
   }
 
-  const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
+  const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
   const { income, expenses } = calculateTotals(walletTransactions);
   const initialBalance = Number(wallet.balance ?? 0) || 0;
   const walletType = wallet.type || 'cash';

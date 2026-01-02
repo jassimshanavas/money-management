@@ -11,22 +11,31 @@ export default function Dashboard() {
   // Filter transactions by wallet if a specific wallet is selected
   const filteredTransactions = activeWalletView === 'all' 
     ? transactions 
-    : transactions.filter(t => t.walletId === activeWalletView);
+    : transactions.filter(t => String(t.walletId) === String(activeWalletView));
   
   const monthlyTransactions = getMonthlyTransactions(filteredTransactions);
   const { income, expenses, balance } = calculateTotals(monthlyTransactions);
   
+  // Calculate totals for all transactions (not just current month) for the comparison graph
+  const { income: allIncome, expenses: allExpenses } = calculateTotals(filteredTransactions);
+  
   // Calculate balance for each wallet
   const walletsWithBalance = wallets.map((wallet) => {
-    const walletTransactions = transactions.filter((t) => t.walletId === wallet.id);
+    // Filter transactions for this wallet with type-safe comparison
+    const walletTransactions = transactions.filter((t) => {
+      const tWalletId = String(t.walletId || '');
+      const wId = String(wallet.id || '');
+      return tWalletId === wId;
+    });
     const walletMonthlyTransactions = getMonthlyTransactions(walletTransactions);
     const { income: monthlyIncome, expenses: monthlyExpenses } = calculateTotals(walletMonthlyTransactions);
+    // Use getWalletSummary which calculates balance from ALL transactions (not just monthly)
     const summary = getWalletSummary(wallet, transactions);
     return { 
       ...wallet,
-      ...summary,
-      income: monthlyIncome,
-      expenses: monthlyExpenses,
+      ...summary, // This includes calculatedBalance from all transactions
+      income: monthlyIncome, // Monthly income for display
+      expenses: monthlyExpenses, // Monthly expenses for display
       transactionCount: walletTransactions.length
     };
   });
@@ -351,7 +360,7 @@ export default function Dashboard() {
         <div className="glass-card p-4 sm:p-5 md:p-6 animate-fade-in">
           <h3 className="text-base sm:text-lg md:text-xl font-semibold mb-3 sm:mb-4 text-slate-800 dark:text-white">Monthly Comparison</h3>
           <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={[{ name: 'Income', value: income }, { name: 'Expenses', value: expenses }]}>
+            <BarChart data={[{ name: 'Income', value: allIncome }, { name: 'Expenses', value: allExpenses }]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.3} />
               <XAxis dataKey="name" stroke="#64748b" />
               <YAxis stroke="#64748b" />

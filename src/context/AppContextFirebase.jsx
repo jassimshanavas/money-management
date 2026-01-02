@@ -585,13 +585,13 @@ export function AppProvider({ children }) {
     dispatch,
     addTransaction: async (transaction) => {
       // Ensure walletId is always set (use selected wallet if not provided)
-      const walletId = transaction.walletId || state.selectedWallet || state.wallets[0]?.id || '1';
+      const walletId = String(transaction.walletId || state.selectedWallet || state.wallets[0]?.id || '1');
       
       const transactionData = {
         ...transaction,
-        walletId: walletId, // Always ensure walletId is set
+        walletId: walletId, // Always ensure walletId is set as string
         userId: state.user?.uid,
-        date: transaction.date || new Date().toISOString(),
+        date: transaction.date || new Date().toISOString(), // Preserve user-selected date
       };
       
       if (state.user) {
