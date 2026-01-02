@@ -1,11 +1,42 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../hooks/useAppContext';
-import { formatCurrency, getMonthlyTransactions, getCategoryTotals } from '../utils/helpers';
+import { formatCurrency, getTransactionsForMonth, getCategoryTotals, getAvailableMonths } from '../utils/helpers';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { ChevronDown, Calendar } from 'lucide-react';
 
 export default function CategoryBreakdown() {
   const { transactions, currency, categories } = useApp();
-  const monthlyTransactions = getMonthlyTransactions(transactions);
+  
+  // Get available months and set default to current month
+  const availableMonths = useMemo(() => getAvailableMonths(transactions), [transactions]);
+  const currentDate = new Date();
+  const currentMonthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
+  
+  // Initialize state with default month
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const defaultMonth = availableMonths.find(m => m.value === currentMonthKey) || availableMonths[0];
+    return defaultMonth?.value || currentMonthKey;
+  });
+  
+  // Update selected month if current month becomes available
+  React.useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.find(m => m.value === selectedMonth)) {
+      const defaultMonth = availableMonths.find(m => m.value === currentMonthKey) || availableMonths[0];
+      if (defaultMonth) {
+        setSelectedMonth(defaultMonth.value);
+      }
+    }
+  }, [availableMonths, currentMonthKey, selectedMonth]);
+  
+  // Parse selected month
+  const [selectedYear, selectedMonthIndex] = selectedMonth ? selectedMonth.split('-').map(Number) : [currentDate.getFullYear(), currentDate.getMonth()];
+  
+  // Get transactions for selected month
+  const monthlyTransactions = useMemo(() => {
+    if (!selectedMonth) return [];
+    return getTransactionsForMonth(transactions, selectedYear, selectedMonthIndex);
+  }, [transactions, selectedYear, selectedMonthIndex]);
+  
   const categoryTotals = getCategoryTotals(monthlyTransactions);
 
   const chartData = Object.entries(categoryTotals).map(([category, amount]) => {
@@ -38,11 +69,47 @@ export default function CategoryBreakdown() {
     return null;
   };
 
+  const selectedMonthLabel = availableMonths.find(m => m.value === selectedMonth)?.label || 'Select Month';
+
   return (
     <div className="pt-20 md:pt-8 px-4 md:px-8 max-w-6xl mx-auto pb-8">
       <div className="mb-8 animate-fade-in">
-        <h1 className="text-4xl font-bold mb-2 text-slate-800 dark:text-white">Category Breakdown</h1>
-        <p className="text-slate-600 dark:text-slate-400">See where your money goes this month</p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 text-slate-800 dark:text-white">Category Breakdown</h1>
+            <p className="text-slate-600 dark:text-slate-400">Analyze your spending by category</p>
+          </div>
+          
+          {/* Month Selector */}
+          {availableMonths.length > 0 && (
+            <div className="flex items-center gap-3">
+              <Calendar className="text-slate-500 dark:text-slate-400" size={20} />
+              <div className="relative">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="appearance-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-2 pr-10 text-slate-800 dark:text-white font-medium cursor-pointer hover:border-teal-500 dark:hover:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                >
+                  {availableMonths.map((month) => (
+                    <option key={month.value} value={month.value}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown 
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" 
+                  size={18} 
+                />
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {selectedMonth && (
+          <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+            Showing expenses for <span className="font-semibold text-slate-800 dark:text-white">{selectedMonthLabel}</span>
+          </div>
+        )}
       </div>
 
       {chartData.length === 0 ? (
@@ -55,7 +122,7 @@ export default function CategoryBreakdown() {
           {/* Pie Chart */}
           <div className="glass-card p-6 md:p-8 mb-6 animate-slide-up">
             <h3 className="text-xl font-semibold mb-6 text-slate-800 dark:text-white text-center">
-              Monthly Expense Distribution
+              Expense Distribution - {selectedMonthLabel}
             </h3>
             <ResponsiveContainer width="100%" height={400}>
               <PieChart>
@@ -126,7 +193,7 @@ export default function CategoryBreakdown() {
           <div className="glass-card p-6 mt-6 animate-fade-in bg-gradient-to-r from-teal-500/10 to-cyan-500/10 border-teal-200 dark:border-teal-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-600 dark:text-slate-400 mb-1">Total Monthly Expenses</p>
+                <p className="text-slate-600 dark:text-slate-400 mb-1">Total Expenses - {selectedMonthLabel}</p>
                 <h3 className="text-3xl font-bold text-slate-800 dark:text-white">
                   {formatCurrency(totalExpenses, currency)}
                 </h3>

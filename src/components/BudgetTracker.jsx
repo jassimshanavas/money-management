@@ -1,11 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../hooks/useAppContext';
-import { formatCurrency, getMonthlyTransactions, getCategoryTotals } from '../utils/helpers';
-import { Target, Edit2, Check, X } from 'lucide-react';
+import { formatCurrency, getTransactionsForMonth, getCategoryTotals, getAvailableMonths } from '../utils/helpers';
+import { Target, Edit2, Check, X, ChevronDown, Calendar } from 'lucide-react';
 
 export default function BudgetTracker() {
   const { budgets, currency, categories, setBudget, transactions } = useApp();
-  const monthlyTransactions = getMonthlyTransactions(transactions);
+  
+  // Get available months and set default to current month
+  const availableMonths = useMemo(() => getAvailableMonths(transactions), [transactions]);
+  const currentDate = new Date();
+  const currentMonthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
+  
+  // Initialize state with default month
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const defaultMonth = availableMonths.find(m => m.value === currentMonthKey) || availableMonths[0];
+    return defaultMonth?.value || currentMonthKey;
+  });
+  
+  // Update selected month if current month becomes available
+  React.useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.find(m => m.value === selectedMonth)) {
+      const defaultMonth = availableMonths.find(m => m.value === currentMonthKey) || availableMonths[0];
+      if (defaultMonth) {
+        setSelectedMonth(defaultMonth.value);
+      }
+    }
+  }, [availableMonths, currentMonthKey, selectedMonth]);
+  
+  // Parse selected month
+  const [selectedYear, selectedMonthIndex] = selectedMonth ? selectedMonth.split('-').map(Number) : [currentDate.getFullYear(), currentDate.getMonth()];
+  
+  // Get transactions for selected month
+  const monthlyTransactions = useMemo(() => {
+    if (!selectedMonth) return [];
+    return getTransactionsForMonth(transactions, selectedYear, selectedMonthIndex);
+  }, [transactions, selectedYear, selectedMonthIndex]);
+  
   const categoryTotals = getCategoryTotals(monthlyTransactions);
   const [editingCategory, setEditingCategory] = useState(null);
   const [editValue, setEditValue] = useState('');
@@ -51,11 +81,47 @@ export default function BudgetTracker() {
   const totalRemaining = totalBudget - totalSpent;
   const overallPercentage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
 
+  const selectedMonthLabel = availableMonths.find(m => m.value === selectedMonth)?.label || 'Select Month';
+
   return (
     <div className="pt-20 md:pt-8 px-4 md:px-8 max-w-6xl mx-auto pb-8">
       <div className="mb-8 animate-fade-in">
-        <h1 className="text-4xl font-bold mb-2 text-slate-800 dark:text-white">Budget Tracker</h1>
-        <p className="text-slate-600 dark:text-slate-400">Monitor your spending against your budgets</p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 text-slate-800 dark:text-white">Budget Tracker</h1>
+            <p className="text-slate-600 dark:text-slate-400">Monitor your spending against your budgets</p>
+          </div>
+          
+          {/* Month Selector */}
+          {availableMonths.length > 0 && (
+            <div className="flex items-center gap-3">
+              <Calendar className="text-slate-500 dark:text-slate-400" size={20} />
+              <div className="relative">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="appearance-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-4 py-2 pr-10 text-slate-800 dark:text-white font-medium cursor-pointer hover:border-teal-500 dark:hover:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all"
+                >
+                  {availableMonths.map((month) => (
+                    <option key={month.value} value={month.value}>
+                      {month.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown 
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none" 
+                  size={18} 
+                />
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {selectedMonth && (
+          <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+            Showing budget analysis for <span className="font-semibold text-slate-800 dark:text-white">{selectedMonthLabel}</span>
+          </div>
+        )}
       </div>
 
       {/* Overall Budget Summary */}
@@ -66,7 +132,7 @@ export default function BudgetTracker() {
               <Target className="text-white" size={24} />
             </div>
             <div>
-              <p className="text-slate-600 dark:text-slate-400 text-sm">Total Monthly Budget</p>
+              <p className="text-slate-600 dark:text-slate-400 text-sm">Total Budget - {selectedMonthLabel}</p>
               <h2 className="text-2xl font-bold text-slate-800 dark:text-white">
                 {formatCurrency(totalBudget, currency)}
               </h2>

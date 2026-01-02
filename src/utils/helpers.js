@@ -20,6 +20,56 @@ export const getMonthlyTransactions = (transactions) => {
   return transactions.filter((t) => isThisMonth(parseISO(t.date)));
 };
 
+/**
+ * Get transactions for a specific month and year
+ * @param {Array} transactions - Array of transaction objects
+ * @param {number} year - Year (e.g., 2024)
+ * @param {number} month - Month (0-11, where 0 is January)
+ * @returns {Array} Filtered transactions for the specified month
+ */
+export const getTransactionsForMonth = (transactions, year, month) => {
+  const monthStart = startOfMonth(new Date(year, month, 1));
+  const monthEnd = endOfMonth(new Date(year, month, 1));
+  
+  return transactions.filter((t) => {
+    const transDate = parseISO(t.date);
+    return transDate >= monthStart && transDate <= monthEnd;
+  });
+};
+
+/**
+ * Get list of available months from transactions
+ * @param {Array} transactions - Array of transaction objects
+ * @returns {Array} Array of {year, month, label} objects sorted by date (newest first)
+ */
+export const getAvailableMonths = (transactions) => {
+  const monthSet = new Set();
+  
+  transactions.forEach((t) => {
+    const transDate = parseISO(t.date);
+    const year = transDate.getFullYear();
+    const month = transDate.getMonth();
+    monthSet.add(`${year}-${month}`);
+  });
+  
+  const months = Array.from(monthSet)
+    .map((key) => {
+      const [year, month] = key.split('-').map(Number);
+      return {
+        year,
+        month,
+        label: format(new Date(year, month, 1), 'MMMM yyyy'),
+        value: `${year}-${month}`,
+      };
+    })
+    .sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      return b.month - a.month;
+    });
+  
+  return months;
+};
+
 export const calculateTotals = (transactions) => {
   const income = transactions
     .filter((t) => t.type === 'income')
