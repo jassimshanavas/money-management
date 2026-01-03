@@ -14,6 +14,7 @@ export default function AddTransaction() {
   const [formData, setFormData] = useState({
     type: 'expense',
     category: getInitialCategory('expense'),
+    tag: '',
     amount: '',
     description: '',
     walletId: selectedWallet,
@@ -66,6 +67,7 @@ export default function AddTransaction() {
     setFormData({
       type: 'expense',
       category: getInitialCategory('expense'),
+      tag: '',
       amount: '',
       description: '',
       walletId: selectedWallet,
@@ -293,6 +295,23 @@ export default function AddTransaction() {
               placeholder="0.00"
               required
             />
+          </div>
+
+          {/* Tag */}
+          <div>
+            <label className="block text-sm font-medium mb-2 text-slate-700 dark:text-slate-300">
+              Tag (Optional)
+            </label>
+            <input
+              type="text"
+              value={formData.tag}
+              onChange={(e) => setFormData({ ...formData, tag: e.target.value })}
+              className="input-field"
+              placeholder="e.g., work, personal, vacation..."
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Add a tag to easily categorize and filter transactions
+            </p>
           </div>
 
           {/* Description */}

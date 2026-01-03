@@ -18,7 +18,8 @@ export default function TransactionHistory() {
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch =
       transaction.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      transaction.category.toLowerCase().includes(searchQuery.toLowerCase());
+      transaction.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      transaction.tag?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = filterCategory === 'All' || transaction.category === filterCategory;
     return matchesSearch && matchesCategory;
   });
@@ -109,8 +110,16 @@ export default function TransactionHistory() {
                       <h3 className="font-semibold text-lg text-slate-800 dark:text-white truncate">
                         {transaction.description || transaction.category}
                       </h3>
-                      <div className="flex items-center gap-3 mt-1">
+                      <div className="flex items-center gap-3 mt-1 flex-wrap">
                         <span className="text-sm text-slate-500 dark:text-slate-400">{transaction.category}</span>
+                        {transaction.tag && (
+                          <>
+                            <span className="text-slate-300 dark:text-slate-600">•</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-medium">
+                              🏷️ {transaction.tag}
+                            </span>
+                          </>
+                        )}
                         <span className="text-slate-300 dark:text-slate-600">•</span>
                         <span className="text-sm text-slate-500 dark:text-slate-400">
                           {formatDate(transaction.date)}

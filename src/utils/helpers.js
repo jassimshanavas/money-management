@@ -95,6 +95,23 @@ export const getCategoryTotals = (transactions) => {
 };
 
 /**
+ * Get totals grouped by tag
+ * @param {Array} transactions - Array of transaction objects
+ * @returns {Object} Object with tag names as keys and total amounts as values
+ */
+export const getTagTotals = (transactions) => {
+  const tagTotals = {};
+  
+  transactions
+    .filter((t) => t.type === 'expense' && t.tag)
+    .forEach((t) => {
+      tagTotals[t.tag] = (tagTotals[t.tag] || 0) + t.amount;
+    });
+  
+  return tagTotals;
+};
+
+/**
  * Calculate billing cycle dates for a credit card
  */
 // export const getBillingCycleDates = (billingDate, lastBillingDate = null, dueDateDuration = 20) => {
