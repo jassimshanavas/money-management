@@ -30,7 +30,7 @@ export const getMonthlyTransactions = (transactions) => {
 export const getTransactionsForMonth = (transactions, year, month) => {
   const monthStart = startOfMonth(new Date(year, month, 1));
   const monthEnd = endOfMonth(new Date(year, month, 1));
-  
+
   return transactions.filter((t) => {
     const transDate = parseISO(t.date);
     return transDate >= monthStart && transDate <= monthEnd;
@@ -44,14 +44,14 @@ export const getTransactionsForMonth = (transactions, year, month) => {
  */
 export const getAvailableMonths = (transactions) => {
   const monthSet = new Set();
-  
+
   transactions.forEach((t) => {
     const transDate = parseISO(t.date);
     const year = transDate.getFullYear();
     const month = transDate.getMonth();
     monthSet.add(`${year}-${month}`);
   });
-  
+
   const months = Array.from(monthSet)
     .map((key) => {
       const [year, month] = key.split('-').map(Number);
@@ -66,7 +66,7 @@ export const getAvailableMonths = (transactions) => {
       if (a.year !== b.year) return b.year - a.year;
       return b.month - a.month;
     });
-  
+
   return months;
 };
 
@@ -74,23 +74,23 @@ export const calculateTotals = (transactions) => {
   const income = transactions
     .filter((t) => t.type === 'income')
     .reduce((sum, t) => sum + t.amount, 0);
-  
+
   const expenses = transactions
     .filter((t) => t.type === 'expense')
     .reduce((sum, t) => sum + t.amount, 0);
-  
+
   return { income, expenses, balance: income - expenses };
 };
 
 export const getCategoryTotals = (transactions) => {
   const categoryTotals = {};
-  
+
   transactions
     .filter((t) => t.type === 'expense')
     .forEach((t) => {
       categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
     });
-  
+
   return categoryTotals;
 };
 
@@ -101,13 +101,13 @@ export const getCategoryTotals = (transactions) => {
  */
 export const getTagTotals = (transactions) => {
   const tagTotals = {};
-  
+
   transactions
     .filter((t) => t.type === 'expense' && t.tag)
     .forEach((t) => {
       tagTotals[t.tag] = (tagTotals[t.tag] || 0) + t.amount;
     });
-  
+
   return tagTotals;
 };
 
@@ -122,10 +122,10 @@ export const getTagTotals = (transactions) => {
 //   const today = new Date();
 //   const currentMonth = today.getMonth();
 //   const currentYear = today.getFullYear();
-  
+
 //   // Get the last billing date or calculate from billing day
 //   let lastBilling = lastBillingDate ? (typeof lastBillingDate === 'string' ? parseISO(lastBillingDate) : lastBillingDate) : null;
-  
+
 //   if (!lastBilling) {
 //     // Calculate last billing date based on billing day
 //     // Handle month-end dates (e.g., if billing date is 31 but month has 30 days)
@@ -133,7 +133,7 @@ export const getTagTotals = (transactions) => {
 //     const daysInLastMonth = new Date(currentYear, currentMonth, 0).getDate();
 //     const actualBillingDay = Math.min(billingDate, daysInThisMonth);
 //     const actualLastMonthBillingDay = Math.min(billingDate, daysInLastMonth);
-    
+
 //     const thisMonthBilling = new Date(currentYear, currentMonth, actualBillingDay);
 //     if (isAfter(today, thisMonthBilling) || getDate(today) >= billingDate) {
 //       lastBilling = thisMonthBilling;
@@ -144,10 +144,10 @@ export const getTagTotals = (transactions) => {
 
 //   // Next billing date is next month's billing day
 //   const nextBilling = addMonths(lastBilling, 1);
-  
+
 //   // Due date is based on dueDateDuration days after billing
 //   const dueDate = addDays(nextBilling, dueDateDuration);
-  
+
 //   return {
 //     lastBillingDate: lastBilling,
 //     nextBillingDate: nextBilling,
@@ -165,15 +165,15 @@ export const getBillingCycleDates = (billingDate, lastBillingDate = null, dueDat
   const today = new Date();
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
-  
+
   let lastBilling = lastBillingDate ? (typeof lastBillingDate === 'string' ? parseISO(lastBillingDate) : lastBillingDate) : null;
-  
+
   if (!lastBilling) {
     const daysInThisMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const daysInLastMonth = new Date(currentYear, currentMonth, 0).getDate();
     const actualBillingDay = Math.min(billingDate, daysInThisMonth);
     const actualLastMonthBillingDay = Math.min(billingDate, daysInLastMonth);
-    
+
     const thisMonthBilling = new Date(currentYear, currentMonth, actualBillingDay);
     if (today >= thisMonthBilling) {
       lastBilling = thisMonthBilling;
@@ -183,12 +183,12 @@ export const getBillingCycleDates = (billingDate, lastBillingDate = null, dueDat
   }
 
   const nextBilling = addMonths(lastBilling, 1);
-  
+
   // CRITICAL FIX: Due date should be for the CURRENT bill (last billing + duration)
   // NOT for the next billing cycle
   const currentBillDueDate = addDays(lastBilling, dueDateDuration);
   const nextBillDueDate = addDays(nextBilling, dueDateDuration);
-  
+
   return {
     lastBillingDate: lastBilling,
     nextBillingDate: nextBilling,
@@ -206,14 +206,14 @@ export const getBillingCycleDates = (billingDate, lastBillingDate = null, dueDat
 // export const isBetweenBillingAndDue = (billingDate, lastBillingDate, dueDateDuration = 20) => {
 //   const cycleDates = getBillingCycleDates(billingDate, lastBillingDate, dueDateDuration);
 //   if (!cycleDates) return false;
-  
+
 //   const today = new Date();
 //   today.setHours(0, 0, 0, 0);
 //   const lastBilling = new Date(cycleDates.lastBillingDate);
 //   lastBilling.setHours(0, 0, 0, 0);
 //   const dueDate = new Date(cycleDates.dueDate);
 //   dueDate.setHours(0, 0, 0, 0);
-  
+
 //   return (isAfter(today, lastBilling) || today.getTime() === lastBilling.getTime()) && 
 //          (isBefore(today, dueDate) || today.getTime() === dueDate.getTime());
 // };
@@ -222,14 +222,14 @@ export const getBillingCycleDates = (billingDate, lastBillingDate = null, dueDat
 export const isBetweenBillingAndDue = (billingDate, lastBillingDate, dueDateDuration = 20) => {
   const cycleDates = getBillingCycleDates(billingDate, lastBillingDate, dueDateDuration);
   if (!cycleDates) return false;
-  
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const lastBilling = new Date(cycleDates.lastBillingDate);
   lastBilling.setHours(0, 0, 0, 0);
   const dueDate = new Date(cycleDates.currentBillDueDate);
   dueDate.setHours(0, 0, 0, 0);
-  
+
   return today >= lastBilling && today <= dueDate;
 };
 /**
@@ -238,11 +238,11 @@ export const isBetweenBillingAndDue = (billingDate, lastBillingDate, dueDateDura
 export const getCurrentBillingCycleTransactions = (transactions, billingDate, lastBillingDate = null, dueDateDuration = 20) => {
   const cycleDates = getBillingCycleDates(billingDate, lastBillingDate, dueDateDuration);
   if (!cycleDates) return transactions;
-  
+
   return transactions.filter((t) => {
     const transDate = parseISO(t.date);
-    return isAfter(transDate, cycleDates.lastBillingDate) || 
-           transDate.getTime() === cycleDates.lastBillingDate.getTime();
+    return isAfter(transDate, cycleDates.lastBillingDate) ||
+      transDate.getTime() === cycleDates.lastBillingDate.getTime();
   });
 };
 
@@ -257,35 +257,35 @@ export const getCurrentBillingCycleTransactions = (transactions, billingDate, la
 
 //   const today = new Date();
 //   today.setHours(0, 0, 0, 0);
-  
+
 //   const billingDate = Number(wallet.billingDate);
 //   const dueDateDuration = Number(wallet.dueDateDuration ?? 20);
 //   const lastBillingDate = wallet.lastBillingDate || null;
-  
+
 //   // Calculate next billing date
 //   const cycleDates = getBillingCycleDates(billingDate, lastBillingDate, dueDateDuration);
 //   if (!cycleDates) return null;
-  
+
 //   const nextBilling = new Date(cycleDates.nextBillingDate);
 //   nextBilling.setHours(0, 0, 0, 0);
-  
+
 //   // Check if billing date has arrived
 //   if (isAfter(today, nextBilling) || today.getTime() === nextBilling.getTime()) {
 //     // Get all transactions for this wallet
 //     const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
-    
+
 //     // Calculate unbilled amount (transactions after last billing date)
 //     const lastBilling = new Date(cycleDates.lastBillingDate);
 //     lastBilling.setHours(0, 0, 0, 0);
-    
+
 //     const unbilledTransactions = walletTransactions.filter((t) => {
 //       const transDate = parseISO(t.date);
 //       return isAfter(transDate, lastBilling) || transDate.getTime() === lastBilling.getTime();
 //     });
-    
+
 //     const { expenses, income } = calculateTotals(unbilledTransactions);
 //     const unbilledAmount = Math.max(0, expenses - income);
-    
+
 //     // The unbilled amount becomes the new billed amount
 //     // Reset payments for the new cycle
 //     return {
@@ -294,7 +294,7 @@ export const getCurrentBillingCycleTransactions = (transactions, billingDate, la
 //       payments: [], // Reset payments for new cycle
 //     };
 //   }
-  
+
 //   return null;
 // };
 // In utils/helpers.js
@@ -442,7 +442,7 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 
 //   if (walletType === 'credit') {
 //     const creditLimit = Number(wallet.creditLimit ?? 0) || 0;
-    
+
 //     // For credit cards: Credit Limit Used = initial debt + expenses - payments (income)
 //     const creditUsed = Math.max(0, initialBalance + expenses - income);
 //     const availableCredit = Math.max(0, creditLimit - creditUsed);
@@ -453,21 +453,21 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 //     const lastBillingDate = wallet.lastBillingDate || null;
 //     const dueDateDuration = wallet.dueDateDuration ? Number(wallet.dueDateDuration) : 20;
 //     const cycleDates = billingDate ? getBillingCycleDates(billingDate, lastBillingDate, dueDateDuration) : null;
-    
+
 //     // Calculate unpaid billed amount and unbilled amount
 //     const lastBilledAmount = Number(wallet.lastBilledAmount ?? 0) || 0;
 //     const payments = wallet.payments || [];
 //     const totalPayments = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 //     const unpaidBillAmount = Math.max(0, lastBilledAmount - totalPayments);
 //     const hasUnpaidBill = unpaidBillAmount > 0 && lastBilledAmount > 0;
-    
+
 //     // Unbilled amount = Credit Limit Used - Last Billed Amount
 //     // This represents transactions after the last billing date
 //     const unbilledAmount = Math.max(0, creditUsed - lastBilledAmount);
-    
+
 //     // Current statement balance is the unbilled amount (will become next bill)
 //     const currentStatementBalance = unbilledAmount;
-    
+
 //     // Calculate days until due
 //     let daysUntilDue = null;
 //     if (cycleDates && cycleDates.dueDate) {
@@ -546,7 +546,7 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 //     // === STEP 2: Calculate creditUsed BEFORE payments ===
 //     // This is the total owed before any payments are made
 //     const creditUsedBeforePayments = Math.max(0, initialBalance + expenses - income);
-    
+
 //     // === STEP 3: Billing cycle info ===
 //     const billingDate = wallet.billingDate ? Number(wallet.billingDate) : null;
 //     const lastBillingDate = wallet.lastBillingDate ? parseISO(wallet.lastBillingDate) : null;
@@ -661,16 +661,16 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 //     const creditLimit = Number(wallet.creditLimit ?? 0) || 0;
 
 //     // === PERFECT CALCULATION LOGIC ===
-    
+
 //     // STEP 1: Get all payments from current billing cycle
 //     const storedPayments = wallet.payments || [];
 //     const storedPaymentsTotal = storedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    
+
 //     // STEP 2: Calculate Credit Limit Used
 //     // Formula: Initial Debt (wallet.balance) + Expenses - Income (refunds/credits)
 //     // NOTE: wallet.balance gets reduced when payments are made, so payments are already reflected
 //     const creditUsed = Math.max(0, initialBalance + expenses - income);
-    
+
 //     // STEP 3: Calculate available credit and utilization
 //     const availableCredit = Math.max(0, creditLimit - creditUsed);
 //     const creditUtilization = creditLimit > 0 ? Math.min(1, creditUsed / creditLimit) : 0;
@@ -683,11 +683,11 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 
 //     // STEP 5: Calculate Last Billed Amount and Unpaid Bill
 //     const lastBilledAmount = Number(wallet.lastBilledAmount ?? 0) || 0;
-    
+
 //     // Unpaid Bill Amount = Last Billed Amount - Payments Made (in current cycle)
 //     const unpaidBillAmount = Math.max(0, lastBilledAmount - storedPaymentsTotal);
 //     const hasUnpaidBill = unpaidBillAmount > 0;
-    
+
 //     // STEP 6: Calculate Unbilled Amount (Current Statement Balance)
 //     // This is the tricky part - we need to calculate what's been spent since last billing
 //     // Formula: Credit Limit Used - Unpaid Bill Amount
@@ -701,7 +701,7 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
 //     //   Unpaid Bill = $0.00
 //     //   Unbilled = $5,991.70 - $0.00 = $5,991.70 ✓
 //     const unbilledAmount = Math.max(0, creditUsed - unpaidBillAmount);
-    
+
 //     // Current statement balance = what will appear on the next bill
 //     const currentStatementBalance = unbilledAmount;
 
@@ -779,14 +779,14 @@ export const getWalletSummary = (wallet, transactions) => {
     const creditLimit = Number(wallet.creditLimit ?? 0) || 0;
 
     // === PERFECT CALCULATION LOGIC ===
-    
+
     // STEP 1: Get all payments from current billing cycle
     const storedPayments = wallet.payments || [];
     const storedPaymentsTotal = storedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-    
+
     // STEP 2: Calculate Credit Limit Used
     const creditUsed = Math.max(0, initialBalance + expenses - income);
-    
+
     // STEP 3: Calculate available credit and utilization
     const availableCredit = Math.max(0, creditLimit - creditUsed);
     const creditUtilization = creditLimit > 0 ? Math.min(1, creditUsed / creditLimit) : 0;
@@ -801,7 +801,7 @@ export const getWalletSummary = (wallet, transactions) => {
     const lastBilledAmount = Number(wallet.lastBilledAmount ?? 0) || 0;
     const unpaidBillAmount = Math.max(0, lastBilledAmount - storedPaymentsTotal);
     const hasUnpaidBill = unpaidBillAmount > 0;
-    
+
     // STEP 6: Calculate Unbilled Amount
     const unbilledAmount = Math.max(0, creditUsed - unpaidBillAmount);
     const currentStatementBalance = unbilledAmount;
@@ -811,7 +811,7 @@ export const getWalletSummary = (wallet, transactions) => {
     // Otherwise, show the NEXT bill's due date (when unbilled will be billed)
     let dueDate = null;
     let daysUntilDue = null;
-    
+
     if (cycleDates) {
       if (hasUnpaidBill) {
         // Show due date for CURRENT unpaid bill
@@ -820,7 +820,7 @@ export const getWalletSummary = (wallet, transactions) => {
         // No unpaid bill, so show when next bill will be due
         dueDate = cycleDates.nextBillDueDate;
       }
-      
+
       if (dueDate) {
         const due = dueDate instanceof Date ? dueDate : parseISO(dueDate);
         daysUntilDue = differenceInDays(due, new Date());
@@ -860,11 +860,11 @@ export const exportToCSV = (transactions, currency) => {
     t.description || '-',
     formatCurrency(t.amount, currency),
   ]);
-  
+
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${cell}"`).join(','))
     .join('\n');
-  
+
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -872,5 +872,116 @@ export const exportToCSV = (transactions, currency) => {
   a.download = `transactions-${format(new Date(), 'yyyy-MM-dd')}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+};
+
+/**
+ * Get date range for quick presets
+ * @param {string} preset - Preset name ('today', 'week', 'month', 'lastMonth', 'all')
+ * @returns {Object} Date range with from and to dates
+ */
+export const getDatePreset = (preset) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  switch (preset) {
+    case 'today': {
+      const end = new Date(today);
+      end.setHours(23, 59, 59, 999);
+      return { from: today, to: end };
+    }
+    case 'week': {
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
+      const end = new Date(start);
+      end.setDate(start.getDate() + 6); // End of week (Saturday)
+      end.setHours(23, 59, 59, 999);
+      return { from: start, to: end };
+    }
+    case 'month': {
+      const start = startOfMonth(today);
+      const end = endOfMonth(today);
+      end.setHours(23, 59, 59, 999);
+      return { from: start, to: end };
+    }
+    case 'lastMonth': {
+      const lastMonth = addMonths(today, -1);
+      const start = startOfMonth(lastMonth);
+      const end = endOfMonth(lastMonth);
+      end.setHours(23, 59, 59, 999);
+      return { from: start, to: end };
+    }
+    case 'all':
+    default:
+      return { from: null, to: null };
+  }
+};
+
+/**
+ * Filter transactions by date range
+ * @param {Array} transactions - Array of transaction objects
+ * @param {Object} dateRange - Object with from and to dates
+ * @returns {Array} Filtered transactions
+ */
+export const filterByDateRange = (transactions, { from, to }) => {
+  if (!from && !to) return transactions;
+
+  return transactions.filter(t => {
+    const date = new Date(t.date);
+    date.setHours(0, 0, 0, 0);
+
+    if (from) {
+      const fromDate = new Date(from);
+      fromDate.setHours(0, 0, 0, 0);
+      if (date < fromDate) return false;
+    }
+
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      if (date > toDate) return false;
+    }
+
+    return true;
+  });
+};
+
+/**
+ * Sort transactions by specified criteria
+ * @param {Array} transactions - Array of transaction objects
+ * @param {string} sortBy - 'date' or 'amount'
+ * @param {string} sortOrder - 'asc' or 'desc'
+ * @returns {Array} Sorted transactions
+ */
+export const sortTransactions = (transactions, sortBy, sortOrder) => {
+  const sorted = [...transactions].sort((a, b) => {
+    if (sortBy === 'amount') {
+      return a.amount - b.amount;
+    } else {
+      // Sort by date
+      return new Date(a.date) - new Date(b.date);
+    }
+  });
+
+  return sortOrder === 'desc' ? sorted.reverse() : sorted;
+};
+
+/**
+ * Calculate summary statistics for transactions
+ * @param {Array} transactions - Array of transaction objects
+ * @returns {Object} Summary with income, expense, net, and count
+ */
+export const calculateSummary = (transactions) => {
+  const summary = transactions.reduce((acc, t) => {
+    if (t.type === 'income') {
+      acc.income += t.amount;
+    } else {
+      acc.expense += t.amount;
+    }
+    acc.count++;
+    return acc;
+  }, { income: 0, expense: 0, count: 0 });
+
+  summary.net = summary.income - summary.expense;
+  return summary;
 };
 

@@ -33,6 +33,15 @@
   .input-field {
     @apply w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white/80 dark:bg-slate-700/80 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-300 text-slate-700 dark:text-slate-200;
   }
+  
+  /* Mobile-optimized utilities */
+  .btn-touch {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+  
+  .mobile-card-compact {
+    @apply p-3 sm:p-4 md:p-5;
+  }
 }
 
 /* Smooth scrollbar */

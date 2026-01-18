@@ -50,6 +50,9 @@ const initialState = {
   darkMode: localStorage.getItem('darkMode') === 'true' || false,
   searchQuery: '',
   filterCategory: 'All',
+  dateRange: { from: null, to: null },
+  sortBy: 'date', // 'date' | 'amount'
+  sortOrder: 'desc', // 'asc' | 'desc'
   selectedWallet: '1',
   categories: [
     { name: 'Food', icon: '🍔', color: '#f59e0b' },
@@ -205,6 +208,12 @@ function appReducer(state, action) {
       return { ...state, searchQuery: action.payload };
     case 'SET_FILTER_CATEGORY':
       return { ...state, filterCategory: action.payload };
+    case 'SET_DATE_RANGE':
+      return { ...state, dateRange: action.payload };
+    case 'SET_SORT_BY':
+      return { ...state, sortBy: action.payload };
+    case 'SET_SORT_ORDER':
+      return { ...state, sortOrder: action.payload };
     case 'UPDATE_SETTINGS':
       return {
         ...state,
@@ -235,9 +244,9 @@ function appReducer(state, action) {
         categories: action.payload,
       };
     case 'LOAD_DATA':
-      return { 
-        ...state, 
-        ...action.payload, 
+      return {
+        ...state,
+        ...action.payload,
         dataLoading: false,
         wallets: action.payload.wallets
           ? action.payload.wallets.map(normalizeWallet)
@@ -281,7 +290,7 @@ export function AppProvider({ children }) {
     try {
       const savedUserId = localStorage.getItem('currentUserId');
       const savedData = localStorage.getItem('moneyTrackerData');
-      
+
       // Only load cached data if it belongs to the current user
       if (savedUserId === userId && savedData) {
         const parsed = JSON.parse(savedData);
@@ -485,11 +494,11 @@ export function AppProvider({ children }) {
     const unsubscribe = onAuthChange(async (user) => {
       if (user) {
         dispatch({ type: 'SET_USER', payload: user });
-        
+
         // Get user data from Firestore
         try {
           let userData = await getUserData(user.uid);
-          
+
           // If user data doesn't exist, initialize it (for new sign-ups or Google sign-ins)
           if (!userData) {
             console.log('User data not found, initializing...');
@@ -500,18 +509,18 @@ export function AppProvider({ children }) {
             });
             userData = await getUserData(user.uid);
           }
-          
+
           dispatch({ type: 'SET_USER_DATA', payload: userData });
-          
+
           // Clean up previous subscriptions
           if (unsubscribeRef.current) {
             unsubscribeRef.current();
             unsubscribeRef.current = null;
           }
-          
+
           // Subscribe to real-time data updates (even if userData was just created)
           unsubscribeRef.current = setupRealtimeSubscriptions(user.uid);
-          
+
           // Set loading to false after subscriptions are set up
           // dataLoading will be set to false when data is loaded
           dispatch({ type: 'SET_LOADING', payload: false });
@@ -586,21 +595,21 @@ export function AppProvider({ children }) {
     addTransaction: async (transaction) => {
       // Ensure walletId is always set (use selected wallet if not provided)
       const walletId = String(transaction.walletId || state.selectedWallet || state.wallets[0]?.id || '1');
-      
+
       const transactionData = {
         ...transaction,
         walletId: walletId, // Always ensure walletId is set as string
         userId: state.user?.uid,
         date: transaction.date || new Date().toISOString(), // Preserve user-selected date
       };
-      
+
       if (state.user) {
         const result = await create('transactions', transactionData);
         dispatch({ type: 'ADD_TRANSACTION', payload: result });
       } else {
         dispatch({ type: 'ADD_TRANSACTION', payload: { ...transactionData, id: Date.now() } });
       }
-      
+
       // Always save to localStorage as backup
       const savedData = localStorage.getItem('moneyTrackerData');
       const data = savedData ? JSON.parse(savedData) : { transactions: [] };
@@ -624,7 +633,7 @@ export function AppProvider({ children }) {
         // Check if budget for this category already exists
         const existingBudgets = await getUserDocuments('budgets', state.user.uid);
         const existingBudget = existingBudgets.find((b) => b.category === category);
-        
+
         if (existingBudget) {
           // Update existing budget
           await update('budgets', existingBudget.id, { amount });
@@ -634,7 +643,7 @@ export function AppProvider({ children }) {
         }
       }
       dispatch({ type: 'SET_BUDGET', payload: { category, amount } });
-      
+
       // Update localStorage
       const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
       localStorage.setItem('moneyTrackerData', JSON.stringify({
@@ -797,6 +806,15 @@ export function AppProvider({ children }) {
     setFilterCategory: (category) => {
       dispatch({ type: 'SET_FILTER_CATEGORY', payload: category });
     },
+    setDateRange: (dateRange) => {
+      dispatch({ type: 'SET_DATE_RANGE', payload: dateRange });
+    },
+    setSortBy: (sortBy) => {
+      dispatch({ type: 'SET_SORT_BY', payload: sortBy });
+    },
+    setSortOrder: (sortOrder) => {
+      dispatch({ type: 'SET_SORT_ORDER', payload: sortOrder });
+    },
     updateSettings: (settings) => {
       if (state.user && state.userData) {
         initializeUserData(state.user.uid, { settings });
@@ -809,12 +827,12 @@ export function AppProvider({ children }) {
       if (state.categories.find((c) => c.name === category.name)) {
         throw new Error('Category with this name already exists');
       }
-      
+
       if (state.user) {
         await create('categories', { userId: state.user.uid, ...category });
       }
       dispatch({ type: 'ADD_CATEGORY', payload: category });
-      
+
       // Update localStorage
       const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
       localStorage.setItem('moneyTrackerData', JSON.stringify({
@@ -831,7 +849,7 @@ export function AppProvider({ children }) {
         }
       }
       dispatch({ type: 'UPDATE_CATEGORY', payload: { oldName, updates } });
-      
+
       // Update localStorage
       const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
       const updatedCategories = state.categories.map((cat) =>
@@ -848,7 +866,7 @@ export function AppProvider({ children }) {
       if (hasTransactions) {
         throw new Error('Cannot delete category that is used in transactions');
       }
-      
+
       if (state.user) {
         const categories = await getUserDocuments('categories', state.user.uid);
         const category = categories.find((c) => c.name === categoryName);
@@ -857,7 +875,7 @@ export function AppProvider({ children }) {
         }
       }
       dispatch({ type: 'DELETE_CATEGORY', payload: categoryName });
-      
+
       // Update localStorage
       const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
       localStorage.setItem('moneyTrackerData', JSON.stringify({
