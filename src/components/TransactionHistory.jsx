@@ -17,13 +17,16 @@ export default function TransactionHistory() {
     transactions,
     currency,
     categories,
+    wallets,
     searchQuery,
     filterCategory,
+    filterWallet,
     dateRange,
     sortBy,
     sortOrder,
     setSearchQuery,
     setFilterCategory,
+    setFilterWallet,
     setDateRange,
     setSortBy,
     setSortOrder,
@@ -43,7 +46,8 @@ export default function TransactionHistory() {
         transaction.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         transaction.tag?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = filterCategory === 'All' || transaction.category === filterCategory;
-      return matchesSearch && matchesCategory;
+      const matchesWallet = filterWallet === 'All' || transaction.walletId === filterWallet;
+      return matchesSearch && matchesCategory && matchesWallet;
     });
 
     // Apply date range filter
@@ -53,7 +57,7 @@ export default function TransactionHistory() {
     filtered = sortTransactions(filtered, sortBy, sortOrder);
 
     return filtered;
-  }, [transactions, searchQuery, filterCategory, dateRange, sortBy, sortOrder]);
+  }, [transactions, searchQuery, filterCategory, filterWallet, dateRange, sortBy, sortOrder]);
 
   // Calculate summary statistics
   const summary = useMemo(() => {
@@ -162,7 +166,7 @@ export default function TransactionHistory() {
         </button>
 
         <div className={`space-y-3 sm:space-y-4 ${showFilters ? 'block' : 'hidden sm:block'}`}>
-          {/* Search and Category */}
+          {/* Search, Category and Wallet Filters */}
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
@@ -183,20 +187,40 @@ export default function TransactionHistory() {
               )}
             </div>
 
-            <div className="relative sm:w-auto">
-              <Filter className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="input-field pl-10 sm:pl-12 pr-8 appearance-none w-full sm:w-auto text-sm sm:text-base"
-              >
-                <option value="All">All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.name} value={cat.name}>
-                    {cat.name}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:w-auto">
+              <div className="relative">
+                <Filter className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="input-field pl-10 sm:pl-12 pr-8 appearance-none w-full sm:w-auto text-sm sm:text-base"
+                >
+                  <option value="All">All Categories</option>
+                  {categories.map((cat) => (
+                    <option key={cat.name} value={cat.name}>
+                      {cat.icon} {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="relative">
+                <span className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none text-base">
+                  💼
+                </span>
+                <select
+                  value={filterWallet}
+                  onChange={(e) => setFilterWallet(e.target.value)}
+                  className="input-field pl-10 sm:pl-12 pr-8 appearance-none w-full sm:w-auto text-sm sm:text-base"
+                >
+                  <option value="All">All Wallets</option>
+                  {wallets.map((wallet) => (
+                    <option key={wallet.id} value={wallet.id}>
+                      {wallet.icon} {wallet.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -222,8 +246,8 @@ export default function TransactionHistory() {
             <button
               onClick={() => setShowCalendar(!showCalendar)}
               className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 ${showCalendar
-                  ? 'bg-teal-500 text-white shadow-lg'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                ? 'bg-teal-500 text-white shadow-lg'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
                 }`}
             >
               <Calendar size={14} />

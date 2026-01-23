@@ -50,6 +50,7 @@ const initialState = {
   darkMode: localStorage.getItem('darkMode') === 'true' || false,
   searchQuery: '',
   filterCategory: 'All',
+  filterWallet: 'All',
   dateRange: { from: null, to: null },
   sortBy: 'date', // 'date' | 'amount'
   sortOrder: 'desc', // 'asc' | 'desc'
@@ -208,6 +209,8 @@ function appReducer(state, action) {
       return { ...state, searchQuery: action.payload };
     case 'SET_FILTER_CATEGORY':
       return { ...state, filterCategory: action.payload };
+    case 'SET_FILTER_WALLET':
+      return { ...state, filterWallet: action.payload };
     case 'SET_DATE_RANGE':
       return { ...state, dateRange: action.payload };
     case 'SET_SORT_BY':
@@ -805,6 +808,9 @@ export function AppProvider({ children }) {
     },
     setFilterCategory: (category) => {
       dispatch({ type: 'SET_FILTER_CATEGORY', payload: category });
+    },
+    setFilterWallet: (wallet) => {
+      dispatch({ type: 'SET_FILTER_WALLET', payload: wallet });
     },
     setDateRange: (dateRange) => {
       dispatch({ type: 'SET_DATE_RANGE', payload: dateRange });
