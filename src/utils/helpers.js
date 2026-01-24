@@ -16,6 +16,14 @@ export const formatDate = (dateString) => {
   }
 };
 
+export const formatDateTime = (dateString) => {
+  try {
+    return format(parseISO(dateString), 'MMM dd, yyyy h:mm a');
+  } catch {
+    return dateString;
+  }
+};
+
 export const getMonthlyTransactions = (transactions) => {
   return transactions.filter((t) => isThisMonth(parseISO(t.date)));
 };
@@ -72,23 +80,39 @@ export const getAvailableMonths = (transactions) => {
 
 export const calculateTotals = (transactions) => {
   const income = transactions
-    .filter((t) => t.type === 'income')
+    .filter((t) => t.type === 'income' && !t.isTransfer)
     .reduce((sum, t) => sum + t.amount, 0);
 
   const expenses = transactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => t.type === 'expense' && (!t.isTransfer || t.transferType === 'interest'))
     .reduce((sum, t) => sum + t.amount, 0);
 
-  return { income, expenses, balance: income - expenses };
+  const transfers = transactions
+    .filter((t) => t.type === 'transfer' || t.isTransfer)
+    .reduce((sum, t) => {
+      if (t.type === 'transfer') return sum + t.amount;
+      if (t.isTransfer && t.transferType === 'source_debit') return sum - t.amount;
+      // Note: interest is treated as an expense, so it doesn't affect 'transfers' bucket
+      return sum;
+    }, 0);
+
+  return {
+    income,
+    expenses,
+    transfers,
+    balance: (income + transfers) - expenses
+  };
 };
 
 export const getCategoryTotals = (transactions) => {
   const categoryTotals = {};
 
   transactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => (t.type === 'expense' || t.type === 'income') && (!t.isTransfer || t.transferType === 'interest'))
     .forEach((t) => {
-      categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
+      const isTransfer = t.isTransfer || t.type === 'transfer';
+      const displayCategory = isTransfer ? (t.transferType === 'interest' ? 'Interest' : 'Transfer') : t.category;
+      categoryTotals[displayCategory] = (categoryTotals[displayCategory] || 0) + t.amount;
     });
 
   return categoryTotals;
@@ -103,7 +127,7 @@ export const getTagTotals = (transactions) => {
   const tagTotals = {};
 
   transactions
-    .filter((t) => t.type === 'expense' && t.tag)
+    .filter((t) => (t.type === 'expense' || t.type === 'income') && t.tag && (!t.isTransfer || t.transferType === 'interest'))
     .forEach((t) => {
       tagTotals[t.tag] = (tagTotals[t.tag] || 0) + t.amount;
     });
@@ -763,16 +787,17 @@ export const getWalletSummary = (wallet, transactions) => {
   }
 
   const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
-  const { income, expenses } = calculateTotals(walletTransactions);
+  const { income, expenses, transfers } = calculateTotals(walletTransactions);
   const initialBalance = Number(wallet.balance ?? 0) || 0;
   const walletType = wallet.type || 'cash';
 
   const baseSummary = {
     income,
     expenses,
+    transfers,
     transactionCount: walletTransactions.length,
     initialBalance,
-    calculatedBalance: initialBalance + income - expenses,
+    calculatedBalance: initialBalance + income + transfers - expenses,
   };
 
   if (walletType === 'credit') {
@@ -785,7 +810,7 @@ export const getWalletSummary = (wallet, transactions) => {
     const storedPaymentsTotal = storedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     // STEP 2: Calculate Credit Limit Used
-    const creditUsed = Math.max(0, initialBalance + expenses - income);
+    const creditUsed = Math.max(0, initialBalance + expenses - (income + transfers));
 
     // STEP 3: Calculate available credit and utilization
     const availableCredit = Math.max(0, creditLimit - creditUsed);
@@ -957,8 +982,34 @@ export const sortTransactions = (transactions, sortBy, sortOrder) => {
     if (sortBy === 'amount') {
       return a.amount - b.amount;
     } else {
-      // Sort by date
-      return new Date(a.date) - new Date(b.date);
+      // 1. Primary Sort: Compare ONLY the date part (Year-Month-Day)
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+
+      const dayA = new Date(dateA.getFullYear(), dateA.getMonth(), dateA.getDate()).getTime();
+      const dayB = new Date(dateB.getFullYear(), dateB.getMonth(), dateB.getDate()).getTime();
+
+      const dayComparison = dayA - dayB;
+
+      if (dayComparison !== 0) {
+        return dayComparison;
+      }
+
+      // 2. Secondary Sort: Manual customOrder
+      const orderA = a.customOrder;
+      const orderB = b.customOrder;
+
+      if (orderA !== undefined && orderB !== undefined) {
+        // IMPORTANT: If we are in 'desc' mode, the final list will be reversed.
+        // To keep manual order 0 at the top after reversal, we must invert the comparison here.
+        return sortOrder === 'desc' ? orderB - orderA : orderA - orderB;
+      }
+
+      if (orderA !== undefined) return sortOrder === 'desc' ? 1 : -1;
+      if (orderB !== undefined) return sortOrder === 'desc' ? -1 : 1;
+
+      // 3. Fallback: Full timestamp
+      return dateA.getTime() - dateB.getTime();
     }
   });
 
@@ -972,16 +1023,22 @@ export const sortTransactions = (transactions, sortBy, sortOrder) => {
  */
 export const calculateSummary = (transactions) => {
   const summary = transactions.reduce((acc, t) => {
-    if (t.type === 'income') {
+    if (t.type === 'income' && !t.isTransfer) {
       acc.income += t.amount;
-    } else {
+    } else if (t.type === 'expense' && (!t.isTransfer || t.transferType === 'interest')) {
       acc.expense += t.amount;
+    } else if (t.type === 'transfer' || t.isTransfer) {
+      if (t.type === 'transfer' || t.transferType === 'destination_credit') {
+        acc.transfers += t.amount;
+      } else if (t.transferType === 'source_debit') {
+        acc.transfers -= t.amount;
+      }
     }
     acc.count++;
     return acc;
-  }, { income: 0, expense: 0, count: 0 });
+  }, { income: 0, expense: 0, transfers: 0, count: 0 });
 
-  summary.net = summary.income - summary.expense;
+  summary.net = (summary.income + summary.transfers) - summary.expense;
   return summary;
 };
 

@@ -13,18 +13,18 @@ export default function CategoryBreakdown() {
   const [selectedDate, setSelectedDate] = useState(null); // Selected date to filter transactions
   const dateScrollRef = useRef(null);
   const currentDateRef = useRef(null);
-  
+
   // Get available months and set default to current month
   const availableMonths = useMemo(() => getAvailableMonths(transactions), [transactions]);
   const currentDate = new Date();
   const currentMonthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
-  
+
   // Initialize state with default month (as array for multi-select)
   const [selectedMonths, setSelectedMonths] = useState(() => {
     const defaultMonth = availableMonths.find(m => m.value === currentMonthKey) || availableMonths[0];
     return defaultMonth ? [defaultMonth.value] : [];
   });
-  
+
   // Update selected months if current month becomes available
   React.useEffect(() => {
     if (availableMonths.length > 0 && selectedMonths.length === 0) {
@@ -39,7 +39,7 @@ export default function CategoryBreakdown() {
       setSelectedMonths(validMonths.length > 0 ? validMonths : [availableMonths[0]?.value].filter(Boolean));
     }
   }, [availableMonths, currentMonthKey, selectedMonths]);
-  
+
   // Toggle month selection
   const toggleMonth = (monthValue) => {
     setSelectedMonths(prev => {
@@ -52,17 +52,17 @@ export default function CategoryBreakdown() {
       }
     });
   };
-  
+
   // Get transactions for all selected months
   const monthlyTransactions = useMemo(() => {
     if (selectedMonths.length === 0) return [];
-    
+
     return selectedMonths.flatMap(monthKey => {
       const [year, month] = monthKey.split('-').map(Number);
       return getTransactionsForMonth(transactions, year, month);
     });
   }, [transactions, selectedMonths]);
-  
+
   const categoryTotals = getCategoryTotals(monthlyTransactions);
   const tagTotals = getTagTotals(monthlyTransactions);
 
@@ -120,11 +120,11 @@ export default function CategoryBreakdown() {
   // Get all dates in selected months
   const availableDates = useMemo(() => {
     if (selectedMonths.length === 0) return [];
-    
+
     const dates = [];
     const currentDate = new Date();
     const currentDateStr = formatDateFns(currentDate, 'yyyy-MM-dd');
-    
+
     // Sort months so current month comes first
     const sortedMonths = [...selectedMonths].sort((a, b) => {
       const currentMonthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
@@ -132,13 +132,13 @@ export default function CategoryBreakdown() {
       if (b === currentMonthKey) return 1;
       return b.localeCompare(a); // Other months in descending order
     });
-    
+
     sortedMonths.forEach(monthKey => {
       const [year, month] = monthKey.split('-').map(Number);
       const monthStart = startOfMonth(new Date(year, month, 1));
       const monthEnd = endOfMonth(new Date(year, month, 1));
       const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-      
+
       daysInMonth.forEach(day => {
         dates.push({
           date: day,
@@ -151,7 +151,7 @@ export default function CategoryBreakdown() {
         });
       });
     });
-    
+
     // Sort by date, ascending order (oldest to newest)
     return dates.sort((a, b) => a.date - b.date);
   }, [selectedMonths]);
@@ -159,14 +159,17 @@ export default function CategoryBreakdown() {
   // Calculate daily expenses for the selected category/tag
   const dailyExpensesData = useMemo(() => {
     if (!selectedCategoryForView && !selectedTagForView) return [];
-    
+
     const dailyTotals = {};
-    
+
     monthlyTransactions.forEach(transaction => {
-      const matchesCategory = !selectedCategoryForView || transaction.category === selectedCategoryForView;
+      const isTransfer = transaction.isTransfer || transaction.type === 'transfer';
+      const displayCategory = isTransfer ? (transaction.transferType === 'interest' ? 'Interest' : 'Transfer') : transaction.category;
+
+      const matchesCategory = !selectedCategoryForView || displayCategory === selectedCategoryForView;
       const matchesTag = !selectedTagForView || transaction.tag === selectedTagForView;
-      
-      if (matchesCategory && matchesTag && transaction.type === 'expense') {
+
+      if (matchesCategory && matchesTag && (transaction.type === 'expense' || (isTransfer && transaction.transferType === 'interest'))) {
         const dateStr = formatDateFns(parseISO(transaction.date), 'yyyy-MM-dd');
         if (!dailyTotals[dateStr]) {
           dailyTotals[dateStr] = 0;
@@ -174,7 +177,7 @@ export default function CategoryBreakdown() {
         dailyTotals[dateStr] += transaction.amount;
       }
     });
-    
+
     // Create chart data sorted by date
     return availableDates
       .map(dateInfo => ({
@@ -190,17 +193,21 @@ export default function CategoryBreakdown() {
   // Get transactions for selected category/tag and date
   const filteredTransactionsForView = useMemo(() => {
     if (!selectedCategoryForView && !selectedTagForView) return [];
-    
+
     let filtered = monthlyTransactions;
-    
+
     if (selectedCategoryForView) {
-      filtered = filtered.filter(t => t.category === selectedCategoryForView);
+      filtered = filtered.filter(t => {
+        const isTransfer = t.isTransfer || t.type === 'transfer';
+        const displayCategory = isTransfer ? (t.transferType === 'interest' ? 'Interest' : 'Transfer') : t.category;
+        return displayCategory === selectedCategoryForView;
+      });
     }
-    
+
     if (selectedTagForView) {
       filtered = filtered.filter(t => t.tag === selectedTagForView);
     }
-    
+
     // Filter by selected date if one is selected
     if (selectedDate) {
       filtered = filtered.filter(t => {
@@ -208,7 +215,7 @@ export default function CategoryBreakdown() {
         return isSameDay(transDate, parseISO(selectedDate));
       });
     }
-    
+
     // Sort by date, newest first
     return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [monthlyTransactions, selectedCategoryForView, selectedTagForView, selectedDate]);
@@ -228,12 +235,12 @@ export default function CategoryBreakdown() {
       setSelectedCategoryForView(null);
     }
     setSelectedDate(null); // Reset date selection when opening modal
-    
+
     // Scroll to current date after a short delay to allow DOM to update
     setTimeout(() => {
       if (currentDateRef.current && dateScrollRef.current) {
-        currentDateRef.current.scrollIntoView({ 
-          behavior: 'smooth', 
+        currentDateRef.current.scrollIntoView({
+          behavior: 'smooth',
           block: 'nearest',
           inline: 'center'
         });
@@ -266,28 +273,26 @@ export default function CategoryBreakdown() {
           <div className="flex gap-2">
             <button
               onClick={() => setActiveTab('category')}
-              className={`px-6 py-2 rounded-lg font-medium transition-all ${
-                activeTab === 'category'
-                  ? 'bg-teal-500 text-white shadow-md'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
+              className={`px-6 py-2 rounded-lg font-medium transition-all ${activeTab === 'category'
+                ? 'bg-teal-500 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
             >
               Category
             </button>
             <button
               onClick={() => setActiveTab('tag')}
-              className={`px-6 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-                activeTab === 'tag'
-                  ? 'bg-teal-500 text-white shadow-md'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-              }`}
+              className={`px-6 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${activeTab === 'tag'
+                ? 'bg-teal-500 text-white shadow-md'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                }`}
             >
               <Tag size={18} />
               Tag
             </button>
           </div>
         </div>
-        
+
         {/* Month Selector - Multi-select with checkboxes */}
         {availableMonths.length > 0 && (
           <div className="glass-card p-4 mb-4 animate-slide-up">
@@ -301,11 +306,10 @@ export default function CategoryBreakdown() {
                 return (
                   <label
                     key={month.value}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected
-                        ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300'
-                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 text-slate-600 dark:text-slate-300'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition-all ${isSelected
+                      ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 text-slate-600 dark:text-slate-300'
+                      }`}
                   >
                     <input
                       type="checkbox"
@@ -344,12 +348,12 @@ export default function CategoryBreakdown() {
             )}
           </div>
         )}
-        
+
         {selectedMonths.length > 0 && (
           <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
             Showing expenses for{' '}
             <span className="font-semibold text-slate-800 dark:text-white">
-              {selectedMonths.length === 1 
+              {selectedMonths.length === 1
                 ? selectedMonthLabels[0]
                 : `${selectedMonths.length} months (${selectedMonthLabels.join(', ')})`}
             </span>
@@ -360,12 +364,12 @@ export default function CategoryBreakdown() {
       {chartData.length === 0 ? (
         <div className="glass-card p-12 text-center animate-fade-in">
           <p className="text-slate-500 dark:text-slate-400 text-lg">
-            {activeTab === 'tag' 
+            {activeTab === 'tag'
               ? 'No tagged expense data available for the selected month' + (selectedMonths.length > 1 ? 's' : '') + '.'
               : 'No expense data available for the selected month' + (selectedMonths.length > 1 ? 's' : '') + '.'}
           </p>
           <p className="text-slate-400 dark:text-slate-500 text-sm mt-2">
-            {activeTab === 'tag' 
+            {activeTab === 'tag'
               ? 'Add tags to your expenses to see the tag breakdown!'
               : 'Add some expenses to see the breakdown!'}
           </p>
@@ -528,7 +532,7 @@ export default function CategoryBreakdown() {
                   <span className="text-xs text-slate-500 dark:text-slate-400">Click on a point to view that day</span>
                 </div>
                 <ResponsiveContainer width="100%" height={220}>
-                  <LineChart 
+                  <LineChart
                     data={dailyExpensesData}
                     onClick={(e) => {
                       if (e && e.activePayload && e.activePayload.length > 0) {
@@ -539,13 +543,13 @@ export default function CategoryBreakdown() {
                     style={{ cursor: 'pointer' }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#94a3b8" opacity={0.2} />
-                    <XAxis 
-                      dataKey="dayNumber" 
+                    <XAxis
+                      dataKey="dayNumber"
                       stroke="#64748b"
                       tick={{ fontSize: 11, fill: '#64748b' }}
                       axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
                     />
-                    <YAxis 
+                    <YAxis
                       stroke="#64748b"
                       tick={{ fontSize: 11, fill: '#64748b' }}
                       axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
@@ -578,23 +582,23 @@ export default function CategoryBreakdown() {
                     <Line
                       type="monotone"
                       dataKey="amount"
-                      stroke={selectedCategoryForView 
+                      stroke={selectedCategoryForView
                         ? categories.find(c => c.name === selectedCategoryForView)?.color || '#14b8a6'
                         : '#14b8a6'
                       }
                       strokeWidth={3}
-                      dot={{ 
-                        fill: selectedCategoryForView 
+                      dot={{
+                        fill: selectedCategoryForView
                           ? categories.find(c => c.name === selectedCategoryForView)?.color || '#14b8a6'
-                          : '#14b8a6', 
+                          : '#14b8a6',
                         r: 5,
                         strokeWidth: 2,
                         stroke: '#fff',
                         style: { cursor: 'pointer' }
                       }}
-                      activeDot={{ 
-                        r: 8, 
-                        fill: selectedCategoryForView 
+                      activeDot={{
+                        r: 8,
+                        fill: selectedCategoryForView
                           ? categories.find(c => c.name === selectedCategoryForView)?.color || '#14b8a6'
                           : '#14b8a6',
                         stroke: '#fff',
@@ -616,7 +620,7 @@ export default function CategoryBreakdown() {
                   {selectedDate ? 'Selected Date' : 'Select a Date to View Transactions'}
                 </h3>
               </div>
-              <div 
+              <div
                 ref={dateScrollRef}
                 className="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600 scrollbar-track-transparent"
               >
@@ -625,47 +629,43 @@ export default function CategoryBreakdown() {
                     const dailyTotal = dailyExpensesData.find(d => d.date === dateInfo.dateString)?.amount || 0;
                     const isSelected = selectedDate === dateInfo.dateString;
                     const hasExpenses = dailyTotal > 0;
-                    
+
                     return (
                       <button
                         key={dateInfo.dateString}
                         ref={dateInfo.isToday ? currentDateRef : null}
                         onClick={() => handleDateSelect(dateInfo.dateString)}
-                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-xl border-2 transition-all min-w-[80px] ${
-                          isSelected
-                            ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-md scale-105'
-                            : dateInfo.isToday
+                        className={`flex flex-col items-center gap-1 px-4 py-3 rounded-xl border-2 transition-all min-w-[80px] ${isSelected
+                          ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-md scale-105'
+                          : dateInfo.isToday
                             ? 'border-teal-400 dark:border-teal-600 bg-teal-50/50 dark:bg-teal-900/10 shadow-sm ring-2 ring-teal-200 dark:ring-teal-800'
                             : hasExpenses
-                            ? 'border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700 bg-white dark:bg-slate-700/50 hover:shadow-md'
-                            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700/30 opacity-60'
-                        }`}
+                              ? 'border-slate-200 dark:border-slate-700 hover:border-teal-300 dark:hover:border-teal-700 bg-white dark:bg-slate-700/50 hover:shadow-md'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700/30 opacity-60'
+                          }`}
                       >
-                        <span className={`text-xs font-medium ${
-                          isSelected 
-                            ? 'text-teal-700 dark:text-teal-300' 
-                            : dateInfo.isToday
+                        <span className={`text-xs font-medium ${isSelected
+                          ? 'text-teal-700 dark:text-teal-300'
+                          : dateInfo.isToday
                             ? 'text-teal-600 dark:text-teal-400 font-semibold'
                             : 'text-slate-500 dark:text-slate-400'
-                        }`}>
+                          }`}>
                           {dateInfo.dayLabel}
                         </span>
-                        <span className={`text-lg font-bold ${
-                          isSelected 
-                            ? 'text-teal-800 dark:text-teal-200' 
-                            : dateInfo.isToday
+                        <span className={`text-lg font-bold ${isSelected
+                          ? 'text-teal-800 dark:text-teal-200'
+                          : dateInfo.isToday
                             ? 'text-teal-700 dark:text-teal-300'
                             : 'text-slate-700 dark:text-slate-300'
-                        }`}>
+                          }`}>
                           {dateInfo.dayNumber}
                         </span>
-                        <span className={`text-xs font-semibold ${
-                          isSelected
-                            ? 'text-teal-600 dark:text-teal-400'
-                            : hasExpenses
+                        <span className={`text-xs font-semibold ${isSelected
+                          ? 'text-teal-600 dark:text-teal-400'
+                          : hasExpenses
                             ? 'text-red-600 dark:text-red-400'
                             : 'text-slate-400 dark:text-slate-500'
-                        }`}>
+                          }`}>
                           {formatCurrency(dailyTotal, currency)}
                         </span>
                         {dateInfo.isToday && !isSelected && (
@@ -685,13 +685,13 @@ export default function CategoryBreakdown() {
               {filteredTransactionsForView.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-slate-500 dark:text-slate-400 text-lg mb-2">
-                    {selectedDate 
+                    {selectedDate
                       ? `No transactions found for ${formatDate(selectedDate)}.`
                       : `No transactions found for this ${selectedCategoryForView ? 'category' : 'tag'}.`
                     }
                   </p>
                   <p className="text-slate-400 dark:text-slate-500 text-sm">
-                    {selectedDate 
+                    {selectedDate
                       ? 'Try selecting a different date or clear the date filter.'
                       : 'Try selecting different months or add more transactions.'
                     }
@@ -700,7 +700,9 @@ export default function CategoryBreakdown() {
               ) : (
                 <div className="space-y-4">
                   {filteredTransactionsForView.map((transaction) => {
-                    const category = categories.find((c) => c.name === transaction.category);
+                    const isTransfer = transaction.isTransfer || transaction.type === 'transfer';
+                    const displayCategory = isTransfer ? (transaction.transferType === 'interest' ? 'Interest' : 'Transfer') : transaction.category;
+                    const category = categories.find((c) => c.name === displayCategory) || categories.find(c => c.name === 'Transfer') || categories[0];
                     return (
                       <div
                         key={transaction.id}
@@ -716,10 +718,10 @@ export default function CategoryBreakdown() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <h3 className="font-semibold text-lg text-slate-800 dark:text-white truncate">
-                                {transaction.description || transaction.category}
+                                {transaction.description || displayCategory}
                               </h3>
                               <div className="flex items-center gap-3 mt-1 flex-wrap">
-                                <span className="text-sm text-slate-500 dark:text-slate-400">{transaction.category}</span>
+                                <span className="text-sm text-slate-500 dark:text-slate-400">{displayCategory}</span>
                                 {transaction.tag && (
                                   <>
                                     <span className="text-slate-300 dark:text-slate-600">•</span>
@@ -737,11 +739,10 @@ export default function CategoryBreakdown() {
                           </div>
                           <div className="flex items-center gap-4">
                             <div
-                              className={`text-xl font-bold ${
-                                transaction.type === 'income' ? 'text-green-500' : 'text-red-500'
-                              }`}
+                              className={`text-xl font-bold ${(transaction.type === 'income' || transaction.type === 'transfer' || transaction.transferType === 'destination_credit') ? 'text-green-500' : 'text-red-500'
+                                }`}
                             >
-                              {transaction.type === 'income' ? '+' : '-'}
+                              {(transaction.type === 'income' || transaction.type === 'transfer' || transaction.transferType === 'destination_credit') ? '+' : '-'}
                               {formatCurrency(transaction.amount, currency)}
                             </div>
                             <button

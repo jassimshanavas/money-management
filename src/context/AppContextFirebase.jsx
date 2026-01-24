@@ -63,6 +63,8 @@ const initialState = {
     { name: 'Entertainment', icon: '🎬', color: '#ec4899' },
     { name: 'Healthcare', icon: '🏥', color: '#10b981' },
     { name: 'Education', icon: '📚', color: '#06b6d4' },
+    { name: 'Transfer', icon: '💱', color: '#14b8a6', type: 'transfer' },
+    { name: 'Interest', icon: '📉', color: '#f43f5e', type: 'expense' },
     { name: 'Other', icon: '📦', color: '#6b7280' },
   ],
   settings: {
@@ -630,6 +632,87 @@ export function AppProvider({ children }) {
         await remove('transactions', id);
       }
       dispatch({ type: 'DELETE_TRANSACTION', payload: id });
+    },
+    walletTransfer: async ({ sourceWalletId, destinationWalletId, amount, interest, description, date, category }) => {
+      // Create 3 transactions for the wallet transfer:
+      // 1. Debit from source wallet (transfer amount)
+      // 2. Debit from source wallet (interest/fee)
+      // 3. Credit to destination wallet (transfer amount, marked as 'transfer' not 'income')
+
+      const transferDate = date || new Date().toISOString();
+      const transferDescription = description || 'Wallet Transfer';
+
+      // Transaction 1: Debit transfer amount from source
+      const sourceDebitTransaction = {
+        type: 'expense',
+        category: category || 'Transfer',
+        amount: parseFloat(amount),
+        description: `${transferDescription} (To: ${state.wallets.find(w => w.id === destinationWalletId)?.name || 'Wallet'})`,
+        walletId: String(sourceWalletId),
+        userId: state.user?.uid,
+        date: transferDate,
+        isTransfer: true,
+        transferType: 'source_debit',
+        tag: 'transfer',
+      };
+
+      // Transaction 2: Debit interest from source
+      const interestTransaction = interest && parseFloat(interest) > 0 ? {
+        type: 'expense',
+        category: 'Interest',
+        amount: parseFloat(interest),
+        description: `${transferDescription} - Interest/Fee`,
+        walletId: String(sourceWalletId),
+        userId: state.user?.uid,
+        date: transferDate,
+        isTransfer: true,
+        transferType: 'interest',
+        tag: 'transfer',
+      } : null;
+
+      // Transaction 3: Credit to destination wallet (marked as transfer, not income)
+      const destinationCreditTransaction = {
+        type: 'transfer', // Special type that won't be counted as income
+        category: category || 'Transfer',
+        amount: parseFloat(amount),
+        description: `${transferDescription} (From: ${state.wallets.find(w => w.id === sourceWalletId)?.name || 'Wallet'})`,
+        walletId: String(destinationWalletId),
+        userId: state.user?.uid,
+        date: transferDate,
+        isTransfer: true,
+        transferType: 'destination_credit',
+        tag: 'transfer',
+      };
+
+      // Add all transactions
+      if (state.user) {
+        await create('transactions', sourceDebitTransaction);
+        if (interestTransaction) {
+          await create('transactions', interestTransaction);
+        }
+        await create('transactions', destinationCreditTransaction);
+
+        // Reload transactions to get updated state
+        const transactions = await getUserDocuments('transactions', state.user.uid);
+        dispatch({ type: 'LOAD_DATA', payload: { transactions } });
+      } else {
+        dispatch({ type: 'ADD_TRANSACTION', payload: { ...sourceDebitTransaction, id: Date.now() } });
+        if (interestTransaction) {
+          dispatch({ type: 'ADD_TRANSACTION', payload: { ...interestTransaction, id: Date.now() + 1 } });
+        }
+        dispatch({ type: 'ADD_TRANSACTION', payload: { ...destinationCreditTransaction, id: Date.now() + 2 } });
+      }
+
+      // Update localStorage
+      const savedData = localStorage.getItem('moneyTrackerData');
+      const data = savedData ? JSON.parse(savedData) : { transactions: [] };
+      data.transactions = [
+        { ...sourceDebitTransaction, id: Date.now() },
+        ...(interestTransaction ? [{ ...interestTransaction, id: Date.now() + 1 }] : []),
+        { ...destinationCreditTransaction, id: Date.now() + 2 },
+        ...(data.transactions || [])
+      ];
+      localStorage.setItem('moneyTrackerData', JSON.stringify(data));
     },
     setBudget: async (category, amount) => {
       if (state.user) {

@@ -7,18 +7,18 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 export default function Dashboard() {
   const { transactions, currency, categories, wallets, selectedWallet, setSelectedWallet } = useApp();
   const [activeWalletView, setActiveWalletView] = useState('all'); // 'all' or wallet id
-  
+
   // Filter transactions by wallet if a specific wallet is selected
-  const filteredTransactions = activeWalletView === 'all' 
-    ? transactions 
+  const filteredTransactions = activeWalletView === 'all'
+    ? transactions
     : transactions.filter(t => String(t.walletId) === String(activeWalletView));
-  
+
   const monthlyTransactions = getMonthlyTransactions(filteredTransactions);
   const { income, expenses, balance } = calculateTotals(monthlyTransactions);
-  
+
   // Calculate totals for all transactions (not just current month) for the comparison graph
   const { income: allIncome, expenses: allExpenses } = calculateTotals(filteredTransactions);
-  
+
   // Calculate balance for each wallet
   const walletsWithBalance = wallets.map((wallet) => {
     // Filter transactions for this wallet with type-safe comparison
@@ -31,7 +31,7 @@ export default function Dashboard() {
     const { income: monthlyIncome, expenses: monthlyExpenses } = calculateTotals(walletMonthlyTransactions);
     // Use getWalletSummary which calculates balance from ALL transactions (not just monthly)
     const summary = getWalletSummary(wallet, transactions);
-    return { 
+    return {
       ...wallet,
       ...summary, // This includes calculatedBalance from all transactions
       income: monthlyIncome, // Monthly income for display
@@ -39,7 +39,7 @@ export default function Dashboard() {
       transactionCount: walletTransactions.length
     };
   });
-  
+
   const totalBalance = walletsWithBalance.reduce((sum, w) => sum + w.calculatedBalance, 0);
 
   // Prepare chart data for last 7 days
@@ -49,15 +49,14 @@ export default function Dashboard() {
     date.setHours(0, 0, 0, 0);
     const nextDay = new Date(date);
     nextDay.setDate(nextDay.getDate() + 1);
-    
+
     // Filter transactions from filteredTransactions (not monthlyTransactions) for the last 7 days
     const dayTransactions = filteredTransactions.filter((t) => {
       const transDate = new Date(t.date);
       transDate.setHours(0, 0, 0, 0);
       return transDate >= date && transDate < nextDay;
     });
-    const dayIncome = dayTransactions.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const dayExpenses = dayTransactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const { income: dayIncome, expenses: dayExpenses } = calculateTotals(dayTransactions);
     return {
       date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       income: dayIncome,
@@ -74,7 +73,7 @@ export default function Dashboard() {
       <div className="mb-4 sm:mb-6 md:mb-8 animate-fade-in">
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 text-slate-800 dark:text-white">Dashboard</h1>
         <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
-          {activeWalletView === 'all' 
+          {activeWalletView === 'all'
             ? "Welcome back! Here's your financial overview."
             : `Viewing ${wallets.find(w => w.id === activeWalletView)?.name || 'wallet'} transactions.`}
         </p>
@@ -106,10 +105,9 @@ export default function Dashboard() {
                   setActiveWalletView(wallet.id);
                   setSelectedWallet(wallet.id);
                 }}
-                className={`glass-card p-3 sm:p-4 md:p-5 cursor-pointer transition-all duration-300 transform hover:scale-105 animate-slide-up group ${
-                  isActive ? 'ring-2 ring-teal-500 dark:ring-cyan-500 shadow-2xl' : 'hover:shadow-xl'
-                }`}
-                style={{ 
+                className={`glass-card p-3 sm:p-4 md:p-5 cursor-pointer transition-all duration-300 transform hover:scale-105 animate-slide-up group ${isActive ? 'ring-2 ring-teal-500 dark:ring-cyan-500 shadow-2xl' : 'hover:shadow-xl'
+                  }`}
+                style={{
                   animationDelay: `${index * 0.1}s`,
                   borderLeft: `4px solid ${wallet.color}`
                 }}
@@ -134,9 +132,9 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <CreditCard 
-                    size={18} 
-                    className={`hidden sm:block transition-colors ${isActive ? 'text-teal-500 dark:text-cyan-400' : 'text-slate-400'}`} 
+                  <CreditCard
+                    size={18}
+                    className={`hidden sm:block transition-colors ${isActive ? 'text-teal-500 dark:text-cyan-400' : 'text-slate-400'}`}
                   />
                 </div>
                 <div className="space-y-1.5 sm:space-y-2">
@@ -197,13 +195,12 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span>Due</span>
-                            <span className={`font-semibold ${
-                              wallet.daysUntilDue !== null && wallet.daysUntilDue < 7
-                                ? 'text-red-500'
-                                : wallet.daysUntilDue !== null && wallet.daysUntilDue < 14
+                            <span className={`font-semibold ${wallet.daysUntilDue !== null && wallet.daysUntilDue < 7
+                              ? 'text-red-500'
+                              : wallet.daysUntilDue !== null && wallet.daysUntilDue < 14
                                 ? 'text-yellow-500'
                                 : ''
-                            }`}>
+                              }`}>
                               {wallet.dueDate instanceof Date ? wallet.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : new Date(wallet.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               {wallet.daysUntilDue !== null && wallet.daysUntilDue < 14 && (
                                 <span className="ml-1">({wallet.daysUntilDue >= 0 ? `${wallet.daysUntilDue}d` : 'overdue'})</span>
@@ -263,7 +260,7 @@ export default function Dashboard() {
             );
           })}
         </div>
-        
+
         {/* Total Balance Card */}
         <div className="glass-card p-4 sm:p-5 md:p-6 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/20 border-teal-200 dark:border-teal-800 animate-fade-in">
           <div className="flex items-center justify-between">
@@ -386,7 +383,9 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-2 sm:space-y-3">
             {recentTransactions.map((transaction) => {
-              const category = categories.find((c) => c.name === transaction.category);
+              const isTransfer = transaction.isTransfer || transaction.type === 'transfer';
+              const displayCategory = isTransfer ? (transaction.transferType === 'interest' ? 'Interest' : 'Transfer') : transaction.category;
+              const category = categories.find((c) => c.name === displayCategory) || categories.find(c => c.name === 'Transfer') || categories[0];
               return (
                 <div
                   key={transaction.id}
@@ -400,9 +399,9 @@ export default function Dashboard() {
                       {category?.icon || '📦'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm sm:text-base text-slate-800 dark:text-white truncate">{transaction.description || transaction.category}</p>
+                      <p className="font-semibold text-sm sm:text-base text-slate-800 dark:text-white truncate">{transaction.description || displayCategory}</p>
                       <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 sm:mt-1 flex-wrap">
-                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{transaction.category}</p>
+                        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">{displayCategory}</p>
                         {transaction.walletId && (
                           <>
                             <span className="text-slate-300 dark:text-slate-600">•</span>
@@ -414,8 +413,8 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className={`text-base sm:text-lg font-bold ml-2 sm:ml-4 flex-shrink-0 ${transaction.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                    {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount, currency)}
+                  <div className={`text-base sm:text-lg font-bold ml-2 sm:ml-4 flex-shrink-0 ${(transaction.type === 'income' || transaction.type === 'transfer' || transaction.transferType === 'destination_credit') ? 'text-green-500' : 'text-red-500'}`}>
+                    {(transaction.type === 'income' || transaction.type === 'transfer' || transaction.transferType === 'destination_credit') ? '+' : '-'}{formatCurrency(transaction.amount, currency)}
                   </div>
                 </div>
               );

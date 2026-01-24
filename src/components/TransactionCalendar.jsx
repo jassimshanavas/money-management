@@ -36,11 +36,16 @@ export default function TransactionCalendar({ transactions, dateRange, onDateRan
             }
 
             const summary = summaries.get(dateKey);
-            if (transaction.type === 'income') {
+
+            // Use consistent logic for income and expenses
+            if (transaction.type === 'income' && !transaction.isTransfer) {
                 summary.income += transaction.amount;
-            } else {
+            } else if (transaction.type === 'expense' && (!transaction.isTransfer || transaction.transferType === 'interest')) {
                 summary.expense += transaction.amount;
             }
+            // Transfers (type: 'transfer') are intentionally excluded from income/expense sums
+            // but contribute to the count
+
             summary.count++;
         });
 

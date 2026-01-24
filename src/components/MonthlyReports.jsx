@@ -2,7 +2,7 @@ import React from 'react';
 import { useApp } from '../hooks/useAppContext';
 import { generateMonthlyReportPDF } from '../utils/pdfGenerator';
 import { generateAIInsights } from '../utils/intelligence';
-import { getMonthlyTransactions } from '../utils/helpers';
+import { getMonthlyTransactions, calculateTotals } from '../utils/helpers';
 import { FileText, Download, Calendar, TrendingUp } from 'lucide-react';
 
 export default function MonthlyReports() {
@@ -19,14 +19,12 @@ export default function MonthlyReports() {
     generateMonthlyReportPDF(monthlyTransactions, budgets, currency, insights);
   };
 
+  const { income, expenses, balance } = calculateTotals(monthlyTransactions);
   const stats = {
     totalTransactions: monthlyTransactions.length,
-    income: monthlyTransactions.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount, 0),
-    expenses: monthlyTransactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
-    balance: monthlyTransactions
-      .filter((t) => t.type === 'income')
-      .reduce((sum, t) => sum + t.amount, 0) -
-      monthlyTransactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0),
+    income,
+    expenses,
+    balance,
   };
 
   return (
@@ -76,11 +74,10 @@ export default function MonthlyReports() {
             <p className="text-sm text-slate-600 dark:text-slate-400">Balance</p>
           </div>
           <h3
-            className={`text-2xl font-bold ${
-              stats.balance >= 0
+            className={`text-2xl font-bold ${stats.balance >= 0
                 ? 'text-green-600 dark:text-green-400'
                 : 'text-red-600 dark:text-red-400'
-            }`}
+              }`}
           >
             ${stats.balance.toFixed(2)}
           </h3>
