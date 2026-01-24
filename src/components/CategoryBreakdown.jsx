@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../hooks/useAppContext';
 import { formatCurrency, formatDate, getTransactionsForMonth, getCategoryTotals, getTagTotals, getAvailableMonths } from '../utils/helpers';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { Calendar, X, Tag, Trash2 } from 'lucide-react';
+import { Calendar, X, Tag, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import { parseISO, format as formatDateFns, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, isToday, startOfDay } from 'date-fns';
 
 export default function CategoryBreakdown() {
@@ -10,6 +10,7 @@ export default function CategoryBreakdown() {
   const [activeTab, setActiveTab] = useState('category'); // 'category' or 'tag'
   const [selectedCategoryForView, setSelectedCategoryForView] = useState(null); // Category name to view transactions
   const [selectedTagForView, setSelectedTagForView] = useState(null); // Tag name to view transactions
+  const [transactionType, setTransactionType] = useState('expense'); // 'expense' or 'income'
   const [selectedDate, setSelectedDate] = useState(null); // Selected date to filter transactions
   const dateScrollRef = useRef(null);
   const currentDateRef = useRef(null);
@@ -63,8 +64,19 @@ export default function CategoryBreakdown() {
     });
   }, [transactions, selectedMonths]);
 
-  const categoryTotals = getCategoryTotals(monthlyTransactions);
-  const tagTotals = getTagTotals(monthlyTransactions);
+  // Filter transactions by type
+  const typeFilteredTransactions = useMemo(() => {
+    return monthlyTransactions.filter(t => {
+      if (transactionType === 'expense') {
+        return t.type === 'expense' || (t.isTransfer && t.transferType === 'interest');
+      } else {
+        return t.type === 'income' && !t.isTransfer;
+      }
+    });
+  }, [monthlyTransactions, transactionType]);
+
+  const categoryTotals = getCategoryTotals(typeFilteredTransactions);
+  const tagTotals = getTagTotals(typeFilteredTransactions);
 
   // Generate colors for tags (since tags don't have predefined colors)
   const tagColors = [
@@ -93,14 +105,14 @@ export default function CategoryBreakdown() {
 
   const chartData = activeTab === 'category' ? categoryChartData : tagChartData;
   const totals = activeTab === 'category' ? categoryTotals : tagTotals;
-  const totalExpenses = Object.values(totals).reduce((sum, amount) => sum + amount, 0);
+  const totalAmount = Object.values(totals).reduce((sum, amount) => sum + amount, 0);
 
   const COLORS = chartData.map((item) => item.color);
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0];
-      const percentage = ((data.value / totalExpenses) * 100).toFixed(1);
+      const percentage = ((data.value / totalAmount) * 100).toFixed(1);
       return (
         <div className="glass-card p-3 border border-slate-200 dark:border-slate-700">
           <p className="font-semibold text-slate-800 dark:text-white">{data.name}</p>
@@ -169,7 +181,11 @@ export default function CategoryBreakdown() {
       const matchesCategory = !selectedCategoryForView || displayCategory === selectedCategoryForView;
       const matchesTag = !selectedTagForView || transaction.tag === selectedTagForView;
 
-      if (matchesCategory && matchesTag && (transaction.type === 'expense' || (isTransfer && transaction.transferType === 'interest'))) {
+      const isCorrectType = transactionType === 'expense'
+        ? (transaction.type === 'expense' || (isTransfer && transaction.transferType === 'interest'))
+        : (transaction.type === 'income' && !transaction.isTransfer);
+
+      if (matchesCategory && matchesTag && isCorrectType) {
         const dateStr = formatDateFns(parseISO(transaction.date), 'yyyy-MM-dd');
         if (!dailyTotals[dateStr]) {
           dailyTotals[dateStr] = 0;
@@ -200,12 +216,23 @@ export default function CategoryBreakdown() {
       filtered = filtered.filter(t => {
         const isTransfer = t.isTransfer || t.type === 'transfer';
         const displayCategory = isTransfer ? (t.transferType === 'interest' ? 'Interest' : 'Transfer') : t.category;
-        return displayCategory === selectedCategoryForView;
+
+        const isCorrectType = transactionType === 'expense'
+          ? (t.type === 'expense' || (isTransfer && t.transferType === 'interest'))
+          : (t.type === 'income' && !t.isTransfer);
+
+        return displayCategory === selectedCategoryForView && isCorrectType;
       });
     }
 
     if (selectedTagForView) {
-      filtered = filtered.filter(t => t.tag === selectedTagForView);
+      filtered = filtered.filter(t => {
+        const isTransfer = t.isTransfer || t.type === 'transfer';
+        const isCorrectType = transactionType === 'expense'
+          ? (t.type === 'expense' || (isTransfer && t.transferType === 'interest'))
+          : (t.type === 'income' && !t.isTransfer);
+        return t.tag === selectedTagForView && isCorrectType;
+      });
     }
 
     // Filter by selected date if one is selected
@@ -264,32 +291,61 @@ export default function CategoryBreakdown() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
           <div>
             <h1 className="text-4xl font-bold mb-2 text-slate-800 dark:text-white">Category Breakdown</h1>
-            <p className="text-slate-600 dark:text-slate-400">Analyze your spending by category or tag</p>
+            <p className="text-slate-600 dark:text-slate-400">Analyze your {transactionType === 'expense' ? 'spending' : 'income'} by category or tag</p>
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="glass-card p-2 mb-4 animate-slide-up inline-block">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setActiveTab('category')}
-              className={`px-6 py-2 rounded-lg font-medium transition-all ${activeTab === 'category'
-                ? 'bg-teal-500 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                }`}
-            >
-              Category
-            </button>
-            <button
-              onClick={() => setActiveTab('tag')}
-              className={`px-6 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${activeTab === 'tag'
-                ? 'bg-teal-500 text-white shadow-md'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
-                }`}
-            >
-              <Tag size={18} />
-              Tag
-            </button>
+        {/* Toggle Toggles */}
+        <div className="flex flex-wrap gap-4 mb-4">
+          {/* Expense/Income Toggle */}
+          <div className="glass-card p-2 animate-slide-up inline-block">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setTransactionType('expense')}
+                className={`px-6 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${transactionType === 'expense'
+                  ? 'bg-red-500 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+              >
+                <TrendingDown size={18} />
+                Expense
+              </button>
+              <button
+                onClick={() => setTransactionType('income')}
+                className={`px-6 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${transactionType === 'income'
+                  ? 'bg-green-500 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+              >
+                <TrendingUp size={18} />
+                Income
+              </button>
+            </div>
+          </div>
+
+          {/* Category/Tag Toggle */}
+          <div className="glass-card p-2 animate-slide-up inline-block">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab('category')}
+                className={`px-6 py-2 rounded-lg font-medium transition-all ${activeTab === 'category'
+                  ? 'bg-teal-500 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+              >
+                Category
+              </button>
+              <button
+                onClick={() => setActiveTab('tag')}
+                className={`px-6 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${activeTab === 'tag'
+                  ? 'bg-teal-500 text-white shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
+              >
+                <Tag size={18} />
+                Tag
+              </button>
+            </div>
           </div>
         </div>
 
@@ -351,7 +407,7 @@ export default function CategoryBreakdown() {
 
         {selectedMonths.length > 0 && (
           <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-            Showing expenses for{' '}
+            Showing {transactionType === 'expense' ? 'expenses' : 'income'} for{' '}
             <span className="font-semibold text-slate-800 dark:text-white">
               {selectedMonths.length === 1
                 ? selectedMonthLabels[0]
@@ -365,13 +421,13 @@ export default function CategoryBreakdown() {
         <div className="glass-card p-12 text-center animate-fade-in">
           <p className="text-slate-500 dark:text-slate-400 text-lg">
             {activeTab === 'tag'
-              ? 'No tagged expense data available for the selected month' + (selectedMonths.length > 1 ? 's' : '') + '.'
-              : 'No expense data available for the selected month' + (selectedMonths.length > 1 ? 's' : '') + '.'}
+              ? `No tagged ${transactionType} data available for the selected month` + (selectedMonths.length > 1 ? 's' : '') + '.'
+              : `No ${transactionType} data available for the selected month` + (selectedMonths.length > 1 ? 's' : '') + '.'}
           </p>
           <p className="text-slate-400 dark:text-slate-500 text-sm mt-2">
             {activeTab === 'tag'
-              ? 'Add tags to your expenses to see the tag breakdown!'
-              : 'Add some expenses to see the breakdown!'}
+              ? `Add tags to your ${transactionType}s to see the tag breakdown!`
+              : `Add some ${transactionType}s to see the breakdown!`}
           </p>
         </div>
       ) : (
@@ -379,7 +435,7 @@ export default function CategoryBreakdown() {
           {/* Pie Chart */}
           <div className="glass-card p-6 md:p-8 mb-6 animate-slide-up">
             <h3 className="text-xl font-semibold mb-6 text-slate-800 dark:text-white text-center">
-              Expense Distribution by {activeTab === 'category' ? 'Category' : 'Tag'}{selectedMonths.length === 1 ? ` - ${selectedMonthLabels[0]}` : ` (${selectedMonths.length} months)`}
+              {transactionType === 'expense' ? 'Expense' : 'Income'} Distribution by {activeTab === 'category' ? 'Category' : 'Tag'}{selectedMonths.length === 1 ? ` - ${selectedMonthLabels[0]}` : ` (${selectedMonths.length} months)`}
             </h3>
             <ResponsiveContainer width="100%" height={400}>
               <PieChart>
@@ -408,7 +464,7 @@ export default function CategoryBreakdown() {
             {chartData
               .sort((a, b) => b.value - a.value)
               .map((item, index) => {
-                const percentage = ((item.value / totalExpenses) * 100).toFixed(1);
+                const percentage = ((item.value / totalAmount) * 100).toFixed(1);
                 return (
                   <div
                     key={item.name}
@@ -452,14 +508,14 @@ export default function CategoryBreakdown() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-slate-600 dark:text-slate-400 mb-1">
-                  Total Expenses{selectedMonths.length === 1 ? ` - ${selectedMonthLabels[0]}` : ` (${selectedMonths.length} months)`}
+                  Total {transactionType === 'expense' ? 'Expenses' : 'Income'}{selectedMonths.length === 1 ? ` - ${selectedMonthLabels[0]}` : ` (${selectedMonths.length} months)`}
                 </p>
                 <h3 className="text-3xl font-bold text-slate-800 dark:text-white">
-                  {formatCurrency(totalExpenses, currency)}
+                  {formatCurrency(totalAmount, currency)}
                 </h3>
                 {selectedMonths.length > 1 && (
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Average per month: {formatCurrency(totalExpenses / selectedMonths.length, currency)}
+                    Average per month: {formatCurrency(totalAmount / selectedMonths.length, currency)}
                   </p>
                 )}
               </div>
@@ -527,7 +583,7 @@ export default function CategoryBreakdown() {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
                     <Calendar className="text-teal-500" size={20} />
-                    Daily Expenses Overview
+                    Daily {transactionType === 'expense' ? 'Expenses' : 'Income'} Overview
                   </h3>
                   <span className="text-xs text-slate-500 dark:text-slate-400">Click on a point to view that day</span>
                 </div>
@@ -569,7 +625,7 @@ export default function CategoryBreakdown() {
                       }}
                       formatter={(value) => [
                         formatCurrency(value, currency),
-                        'Expense'
+                        transactionType === 'expense' ? 'Expense' : 'Income'
                       ]}
                       labelFormatter={(label, payload) => {
                         if (payload && payload[0]) {
@@ -617,7 +673,7 @@ export default function CategoryBreakdown() {
               <div className="flex items-center gap-2 mb-3">
                 <Calendar className="text-slate-500 dark:text-slate-400" size={18} />
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  {selectedDate ? 'Selected Date' : 'Select a Date to View Transactions'}
+                  {selectedDate ? 'Selected Date' : `Select a Date to View ${transactionType === 'expense' ? 'Expenses' : 'Income'}`}
                 </h3>
               </div>
               <div
@@ -663,7 +719,7 @@ export default function CategoryBreakdown() {
                         <span className={`text-xs font-semibold ${isSelected
                           ? 'text-teal-600 dark:text-teal-400'
                           : hasExpenses
-                            ? 'text-red-600 dark:text-red-400'
+                            ? (transactionType === 'expense' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400')
                             : 'text-slate-400 dark:text-slate-500'
                           }`}>
                           {formatCurrency(dailyTotal, currency)}
