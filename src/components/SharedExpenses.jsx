@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { format } from 'date-fns';
 import { useApp } from '../hooks/useAppContext';
 import { formatCurrency, formatDate } from '../utils/helpers';
 import { Users, Plus, Check, X, UserPlus } from 'lucide-react';
@@ -10,7 +11,7 @@ export default function SharedExpenses() {
     description: '',
     totalAmount: '',
     category: categories[0].name,
-    date: new Date().toISOString().split('T')[0],
+    date: format(new Date(), 'yyyy-MM-dd'),
     participants: [{ name: 'You', amount: 0, paid: true }],
     newParticipant: '',
   });
@@ -50,7 +51,7 @@ export default function SharedExpenses() {
       description: '',
       totalAmount: '',
       category: categories[0].name,
-      date: new Date().toISOString().split('T')[0],
+      date: format(new Date(), 'yyyy-MM-dd'),
       participants: [{ name: 'You', amount: 0, paid: true }],
       newParticipant: '',
     });
@@ -246,9 +247,8 @@ export default function SharedExpenses() {
             return (
               <div
                 key={expense.id}
-                className={`glass-card p-6 animate-slide-up ${
-                  allPaid ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : ''
-                }`}
+                className={`glass-card p-6 animate-slide-up ${allPaid ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : ''
+                  }`}
                 style={{ animationDelay: `${index * 0.05}s` }}
               >
                 <div className="flex items-start justify-between mb-4">

@@ -1,8 +1,9 @@
 // Create a new file: src/components/PaymentModal.jsx
 
-import React, { useState } from 'react';
-import { X, DollarSign, CreditCard, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, DollarSign, CreditCard, AlertCircle, CheckCircle, Calendar } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
+import { format } from 'date-fns';
 
 const scrollbarStyles = `
   .payment-modal-scroll {
@@ -34,15 +35,29 @@ const scrollbarStyles = `
   }
 `;
 
-export default function PaymentModal({ 
-  isOpen, 
-  onClose, 
-  wallet, 
-  currency, 
-  onPayment 
+export default function PaymentModal({
+  isOpen,
+  onClose,
+  wallet,
+  currency,
+  onPayment,
+  initialData = null // { id, amount, date }
 }) {
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentType, setPaymentType] = useState('full'); // 'full' or 'custom'
+  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  useEffect(() => {
+    if (initialData) {
+      setPaymentAmount(initialData.amount.toString());
+      setPaymentType('custom');
+      setPaymentDate(initialData.date.split('T')[0]);
+    } else {
+      setPaymentAmount('');
+      setPaymentType('full');
+      setPaymentDate(format(new Date(), 'yyyy-MM-dd'));
+    }
+  }, [initialData, isOpen]);
 
   if (!isOpen || !wallet) return null;
 
@@ -52,9 +67,9 @@ export default function PaymentModal({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    const amount = paymentType === 'full' 
-      ? maxPayable 
+
+    const amount = paymentType === 'full'
+      ? maxPayable
       : parseFloat(paymentAmount);
 
     if (isNaN(amount) || amount <= 0) {
@@ -62,12 +77,14 @@ export default function PaymentModal({
       return;
     }
 
-    if (amount > maxPayable) {
+    // In edit mode, maxPayable already reflects the amount being edited
+    // So we don't strictly enforce maxPayable check for edit mode if it's the SAME amount
+    if (!initialData && amount > maxPayable) {
       alert(`Payment cannot exceed unpaid bill amount: ${formatCurrency(maxPayable, currency)}`);
       return;
     }
 
-    onPayment(amount);
+    onPayment(amount, paymentDate, initialData?.id);
     handleClose();
   };
 
@@ -78,14 +95,14 @@ export default function PaymentModal({
   };
 
   const isFullPayment = paymentType === 'full' || parseFloat(paymentAmount) >= maxPayable;
-  const remainingAfterPayment = paymentType === 'full' 
-    ? 0 
+  const remainingAfterPayment = paymentType === 'full'
+    ? 0
     : Math.max(0, maxPayable - (parseFloat(paymentAmount) || 0));
 
   return (
     <>
       <style>{scrollbarStyles}</style>
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4 animate-fade-in">
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden animate-scale-in flex flex-col">
           {/* Header */}
           <div className="sticky top-0 bg-gradient-to-r from-teal-600 to-teal-500 p-6 shadow-md flex-shrink-0">
@@ -124,13 +141,13 @@ export default function PaymentModal({
                 </div>
                 {wallet.dueDate && wallet.daysUntilDue !== null && (
                   <div className="text-xs text-red-600 dark:text-red-400 font-medium">
-                    Due: {new Date(wallet.dueDate).toLocaleDateString('en-US', { 
-                      month: 'short', 
+                    Due: {new Date(wallet.dueDate).toLocaleDateString('en-US', {
+                      month: 'short',
                       day: 'numeric',
                       year: 'numeric'
-                    })} ({wallet.daysUntilDue > 0 ? `${wallet.daysUntilDue} days left` : 
-                           wallet.daysUntilDue === 0 ? 'Due today!' : 
-                           `${Math.abs(wallet.daysUntilDue)} days overdue`})
+                    })} ({wallet.daysUntilDue > 0 ? `${wallet.daysUntilDue} days left` :
+                      wallet.daysUntilDue === 0 ? 'Due today!' :
+                        `${Math.abs(wallet.daysUntilDue)} days overdue`})
                   </div>
                 )}
               </div>
@@ -146,9 +163,9 @@ export default function PaymentModal({
                     </span>
                   </div>
                   <p className="text-xs text-orange-600 dark:text-orange-400 mt-2 font-medium">
-                    Will be billed on {wallet.nextBillingDate ? new Date(wallet.nextBillingDate).toLocaleDateString('en-US', { 
-                      month: 'short', 
-                      day: 'numeric' 
+                    Will be billed on {wallet.nextBillingDate ? new Date(wallet.nextBillingDate).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric'
                     }) : 'next billing date'}
                   </p>
                 </div>
@@ -175,33 +192,29 @@ export default function PaymentModal({
                 <button
                   type="button"
                   onClick={() => setPaymentType('full')}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                    paymentType === 'full'
-                      ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-md'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
-                  }`}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${paymentType === 'full'
+                    ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-md'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
+                    }`}
                 >
                   <div className="text-center">
-                    <CheckCircle 
-                      size={24} 
-                      className={`mx-auto mb-2 transition-colors ${
-                        paymentType === 'full' 
-                          ? 'text-teal-600 dark:text-teal-400' 
-                          : 'text-slate-400'
-                      }`} 
+                    <CheckCircle
+                      size={24}
+                      className={`mx-auto mb-2 transition-colors ${paymentType === 'full'
+                        ? 'text-teal-600 dark:text-teal-400'
+                        : 'text-slate-400'
+                        }`}
                     />
-                    <div className={`font-bold text-sm transition-colors ${
-                      paymentType === 'full'
-                        ? 'text-teal-700 dark:text-teal-300'
-                        : 'text-slate-600 dark:text-slate-400'
-                    }`}>
+                    <div className={`font-bold text-sm transition-colors ${paymentType === 'full'
+                      ? 'text-teal-700 dark:text-teal-300'
+                      : 'text-slate-600 dark:text-slate-400'
+                      }`}>
                       Full Payment
                     </div>
-                    <div className={`text-xs mt-1 font-medium transition-colors ${
-                      paymentType === 'full'
-                        ? 'text-teal-600 dark:text-teal-400'
-                        : 'text-slate-500 dark:text-slate-500'
-                    }`}>
+                    <div className={`text-xs mt-1 font-medium transition-colors ${paymentType === 'full'
+                      ? 'text-teal-600 dark:text-teal-400'
+                      : 'text-slate-500 dark:text-slate-500'
+                      }`}>
                       {formatCurrency(maxPayable, currency)}
                     </div>
                   </div>
@@ -210,33 +223,29 @@ export default function PaymentModal({
                 <button
                   type="button"
                   onClick={() => setPaymentType('custom')}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                    paymentType === 'custom'
-                      ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-md'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
-                  }`}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${paymentType === 'custom'
+                    ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 shadow-md'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
+                    }`}
                 >
                   <div className="text-center">
-                    <DollarSign 
-                      size={24} 
-                      className={`mx-auto mb-2 transition-colors ${
-                        paymentType === 'custom' 
-                          ? 'text-teal-600 dark:text-teal-400' 
-                          : 'text-slate-400'
-                      }`} 
+                    <DollarSign
+                      size={24}
+                      className={`mx-auto mb-2 transition-colors ${paymentType === 'custom'
+                        ? 'text-teal-600 dark:text-teal-400'
+                        : 'text-slate-400'
+                        }`}
                     />
-                    <div className={`font-bold text-sm transition-colors ${
-                      paymentType === 'custom'
-                        ? 'text-teal-700 dark:text-teal-300'
-                        : 'text-slate-600 dark:text-slate-400'
-                    }`}>
+                    <div className={`font-bold text-sm transition-colors ${paymentType === 'custom'
+                      ? 'text-teal-700 dark:text-teal-300'
+                      : 'text-slate-600 dark:text-slate-400'
+                      }`}>
                       Custom Amount
                     </div>
-                    <div className={`text-xs mt-1 font-medium transition-colors ${
-                      paymentType === 'custom'
-                        ? 'text-teal-600 dark:text-teal-400'
-                        : 'text-slate-500 dark:text-slate-500'
-                    }`}>
+                    <div className={`text-xs mt-1 font-medium transition-colors ${paymentType === 'custom'
+                      ? 'text-teal-600 dark:text-teal-400'
+                      : 'text-slate-500 dark:text-slate-500'
+                      }`}>
                       Partial payment
                     </div>
                   </div>
@@ -252,13 +261,12 @@ export default function PaymentModal({
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg font-semibold">
-                    $
+                    {currency === 'INR' ? '₹' : '$'}
                   </span>
                   <input
                     type="number"
                     step="0.01"
                     min="0.01"
-                    max={maxPayable}
                     value={paymentAmount}
                     onChange={(e) => setPaymentAmount(e.target.value)}
                     placeholder="0.00"
@@ -267,8 +275,8 @@ export default function PaymentModal({
                   />
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-medium">
-                  <span>Maximum: {formatCurrency(maxPayable, currency)}</span>
-                  {paymentAmount && parseFloat(paymentAmount) > 0 && (
+                  {!initialData && <span>Maximum: {formatCurrency(maxPayable, currency)}</span>}
+                  {paymentAmount && parseFloat(paymentAmount) > 0 && !initialData && (
                     <button
                       type="button"
                       onClick={() => setPaymentAmount(maxPayable.toString())}
@@ -281,6 +289,24 @@ export default function PaymentModal({
               </div>
             )}
 
+            {/* Date Selection */}
+            <div className="space-y-2 pt-2">
+              <label className="block text-sm font-bold text-slate-800 dark:text-slate-200">
+                Payment Date
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Calendar size={18} />
+                </span>
+                <input
+                  type="date"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 font-semibold rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all duration-200"
+                />
+              </div>
+            </div>
+
             {/* Payment Preview */}
             {(paymentType === 'full' || (paymentType === 'custom' && paymentAmount && parseFloat(paymentAmount) > 0)) && (
               <div className="p-4 rounded-xl bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/50 space-y-3">
@@ -288,11 +314,10 @@ export default function PaymentModal({
                   <span className="text-teal-700 dark:text-teal-300 font-semibold">
                     Remaining Balance
                   </span>
-                  <span className={`font-bold transition-colors ${
-                    remainingAfterPayment === 0 
-                      ? 'text-teal-600 dark:text-teal-400' 
-                      : 'text-orange-600 dark:text-orange-400'
-                  }`}>
+                  <span className={`font-bold transition-colors ${remainingAfterPayment === 0
+                    ? 'text-teal-600 dark:text-teal-400'
+                    : 'text-orange-600 dark:text-orange-400'
+                    }`}>
                     {formatCurrency(remainingAfterPayment, currency)}
                   </span>
                 </div>

@@ -66,6 +66,19 @@ export default function TransactionHistory() {
     return filtered;
   }, [transactions, searchQuery, filterCategory, filterWallet, dateRange, sortBy, sortOrder]);
 
+  // Filtered transactions for calendar (without date range filter)
+  const calendarTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      const matchesSearch =
+        transaction.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        transaction.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        transaction.tag?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesCategory = filterCategory === 'All' || transaction.category === filterCategory;
+      const matchesWallet = filterWallet === 'All' || transaction.walletId === filterWallet;
+      return matchesSearch && matchesCategory && matchesWallet;
+    });
+  }, [transactions, searchQuery, filterCategory, filterWallet]);
+
   // Calculate summary statistics
   const summary = useMemo(() => {
     return calculateSummary(filteredAndSortedTransactions);
@@ -421,7 +434,7 @@ export default function TransactionHistory() {
           {/* Interactive Calendar */}
           {showCalendar && (
             <TransactionCalendar
-              transactions={transactions}
+              transactions={calendarTransactions}
               dateRange={dateRange}
               onDateRangeChange={(range) => {
                 setDateRange(range);

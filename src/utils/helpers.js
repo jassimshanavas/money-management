@@ -413,17 +413,17 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
   const shouldAdvance = today >= nextBillingDate || forceAdvance;
 
   if (shouldAdvance && lastBillingDate) {
-    // Get current wallet summary BEFORE advancing
     const currentSummary = getWalletSummary(wallet, transactions);
-    const currentUnbilledAmount = currentSummary.unbilledAmount || 0;
+    const exactUnbilledAmount = currentSummary.unbilledAmount || 0;
+    const roundedBilledAmount = Math.round(exactUnbilledAmount);
 
     return {
       lastBillingDate: nextBillingDate.toISOString(),
-      lastBilledAmount: currentUnbilledAmount,
+      lastBilledAmount: roundedBilledAmount,
       dueDate: nextBillDueDate.toISOString(), // Due date for the NEW bill
       payments: [],
-      hasUnpaidBill: currentUnbilledAmount > 0,
-      unpaidBillAmount: currentUnbilledAmount,
+      hasUnpaidBill: roundedBilledAmount > 0,
+      unpaidBillAmount: roundedBilledAmount,
     };
   }
 
@@ -805,31 +805,47 @@ export const getWalletSummary = (wallet, transactions) => {
 
     // === PERFECT CALCULATION LOGIC ===
 
-    // STEP 1: Get all payments from current billing cycle
-    const storedPayments = wallet.payments || [];
-    const storedPaymentsTotal = storedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    // STEP 1: Get billing cycle information first
+    const billingDate = wallet.billingDate ? Number(wallet.billingDate) : null;
+    const lastBillingDateStored = wallet.lastBillingDate ? parseISO(wallet.lastBillingDate) : null;
+    const dueDateDuration = Number(wallet.dueDateDuration ?? 20);
+    const cycleDates = billingDate ? getBillingCycleDates(billingDate, lastBillingDateStored, dueDateDuration) : null;
 
-    // STEP 2: Calculate Credit Limit Used
+    // STEP 2: Calculate Credit Limit Used (Total Debt)
     const creditUsed = Math.max(0, initialBalance + expenses - (income + transfers));
 
     // STEP 3: Calculate available credit and utilization
     const availableCredit = Math.max(0, creditLimit - creditUsed);
     const creditUtilization = creditLimit > 0 ? Math.min(1, creditUsed / creditLimit) : 0;
 
-    // STEP 4: Get billing cycle information
-    const billingDate = wallet.billingDate ? Number(wallet.billingDate) : null;
-    const lastBillingDate = wallet.lastBillingDate ? parseISO(wallet.lastBillingDate) : null;
-    const dueDateDuration = Number(wallet.dueDateDuration ?? 20);
-    const cycleDates = billingDate ? getBillingCycleDates(billingDate, lastBillingDate, dueDateDuration) : null;
+    // STEP 4: Calculate Unbilled Amount (Spending since last billing date)
+    let unbilledAmount = 0;
+    if (cycleDates?.lastBillingDate) {
+      const lastBilling = cycleDates.lastBillingDate;
+      const unbilledExpenses = walletTransactions
+        .filter(t => parseISO(t.date) >= lastBilling && t.type === 'expense' && (!t.isTransfer || t.transferType === 'interest'))
+        .reduce((sum, t) => sum + t.amount, 0);
 
-    // STEP 5: Calculate Last Billed Amount and Unpaid Bill
-    const lastBilledAmount = Number(wallet.lastBilledAmount ?? 0) || 0;
-    const unpaidBillAmount = Math.max(0, lastBilledAmount - storedPaymentsTotal);
+      const unbilledIncome = walletTransactions
+        .filter(t => parseISO(t.date) >= lastBilling && t.type === 'income' && !t.isTransfer && t.tag !== 'bill-payment' && t.category !== 'Bill Payment')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      unbilledAmount = Math.max(0, unbilledExpenses - unbilledIncome);
+    } else {
+      unbilledAmount = creditUsed;
+    }
+
+    // STEP 5: Calculate Unpaid Bill (Total Debt - Unbilled)
+    // Dynamic calculation is much more robust than relying on stored props
+    const unpaidBillAmount = Math.max(0, creditUsed - unbilledAmount);
+    const lastBilledAmount = unpaidBillAmount;
+
     const hasUnpaidBill = unpaidBillAmount > 0;
-
-    // STEP 6: Calculate Unbilled Amount
-    const unbilledAmount = Math.max(0, creditUsed - unpaidBillAmount);
     const currentStatementBalance = unbilledAmount;
+    const roundedStatementBalance = Math.round(unbilledAmount);
+
+    const storedPayments = wallet.payments || [];
+    const storedPaymentsTotal = storedPayments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
     // STEP 7: Determine which due date to show
     // If there's an unpaid bill, show the CURRENT bill's due date
@@ -860,6 +876,7 @@ export const getWalletSummary = (wallet, transactions) => {
       availableCredit,
       creditUtilization,
       currentStatementBalance,
+      roundedStatementBalance,
       lastBilledAmount,
       unpaidBillAmount,
       unbilledAmount,

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { format } from 'date-fns';
 import { useApp } from '../hooks/useAppContext';
 import { scanReceipt, extractTransactionData } from '../utils/receiptScanner';
 import { formatCurrency } from '../utils/helpers';
@@ -26,7 +27,7 @@ export default function ReceiptScanner() {
     try {
       const scanResult = await scanReceipt(file);
       setResult(scanResult);
-      
+
       if (scanResult.success) {
         const transactionData = extractTransactionData(scanResult);
         if (transactionData) {
@@ -199,7 +200,7 @@ export default function ReceiptScanner() {
                 </label>
                 <input
                   type="date"
-                  value={formData.date ? formData.date.split('T')[0] : new Date().toISOString().split('T')[0]}
+                  value={formData.date ? format(new Date(formData.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')}
                   onChange={(e) => setFormData({ ...formData, date: new Date(e.target.value).toISOString() })}
                   className="input-field"
                   required

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../hooks/useAppContext';
 import { formatCurrency, getWalletSummary } from '../utils/helpers';
 import { X, Save } from 'lucide-react';
+import { format } from 'date-fns';
 
 const scrollbarStyles = `
   .edit-modal-scroll {
@@ -50,7 +51,7 @@ export default function EditTransactionModal({ isOpen, onClose, transaction }) {
         amount: '',
         description: '',
         walletId: selectedWallet,
-        date: new Date().toISOString().split('T')[0],
+        date: format(new Date(), 'yyyy-MM-dd'),
     });
 
     // Initialize form with transaction data when modal opens
@@ -63,7 +64,7 @@ export default function EditTransactionModal({ isOpen, onClose, transaction }) {
                 amount: transaction.amount?.toString() || '',
                 description: transaction.description || '',
                 walletId: transaction.walletId || selectedWallet,
-                date: transaction.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                date: transaction.date ? format(new Date(transaction.date), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
             });
         }
     }, [isOpen, transaction, selectedWallet]);
@@ -241,15 +242,15 @@ export default function EditTransactionModal({ isOpen, onClose, transaction }) {
                                 <div className="flex flex-col sm:grid sm:grid-cols-2 gap-2 sm:gap-3 mb-3">
                                     <button
                                         type="button"
-                                        onClick={() => setFormData({ ...formData, date: new Date().toISOString().split('T')[0] })}
-                                        className={`p-2 sm:p-3 rounded-xl transition-all duration-300 text-sm sm:text-base font-medium ${formData.date === new Date().toISOString().split('T')[0]
+                                        onClick={() => setFormData({ ...formData, date: format(new Date(), 'yyyy-MM-dd') })}
+                                        className={`p-2 sm:p-3 rounded-xl transition-all duration-300 text-sm sm:text-base font-medium ${formData.date === format(new Date(), 'yyyy-MM-dd')
                                             ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
                                             : 'bg-white/80 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600'
                                             }`}
                                     >
                                         Today
                                     </button>
-                                    <div className={`rounded-xl transition-all duration-300 border ${formData.date !== new Date().toISOString().split('T')[0]
+                                    <div className={`rounded-xl transition-all duration-300 border ${formData.date !== format(new Date(), 'yyyy-MM-dd')
                                         ? 'border-teal-500 bg-teal-50/50 dark:bg-teal-900/20'
                                         : 'border-slate-300 dark:border-slate-600'
                                         }`}>

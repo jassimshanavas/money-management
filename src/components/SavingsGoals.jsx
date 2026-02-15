@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { useApp } from '../hooks/useAppContext';
 import { formatCurrency } from '../utils/helpers';
 import { triggerConfetti } from '../utils/animations';
@@ -135,7 +136,7 @@ export default function SavingsGoals() {
                   value={formData.targetDate}
                   onChange={(e) => setFormData({ ...formData, targetDate: e.target.value })}
                   className="input-field"
-                  min={new Date().toISOString().split('T')[0]}
+                  min={format(new Date(), 'yyyy-MM-dd')}
                   required
                 />
               </div>
@@ -170,11 +171,10 @@ export default function SavingsGoals() {
           {goalsWithProgress.map((goal, index) => (
             <div
               key={goal.id}
-              className={`glass-card p-6 animate-slide-up ${
-                goal.achieved
+              className={`glass-card p-6 animate-slide-up ${goal.achieved
                   ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800'
                   : ''
-              }`}
+                }`}
               style={{ animationDelay: `${index * 0.1}s` }}
             >
               <div className="flex items-start justify-between mb-4">
@@ -215,11 +215,10 @@ export default function SavingsGoals() {
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
                   <div
-                    className={`h-3 rounded-full transition-all duration-500 ${
-                      goal.achieved
+                    className={`h-3 rounded-full transition-all duration-500 ${goal.achieved
                         ? 'bg-gradient-to-r from-green-500 to-emerald-500'
                         : 'bg-gradient-to-r from-teal-500 to-cyan-500'
-                    }`}
+                      }`}
                     style={{ width: `${goal.progress}%` }}
                   />
                 </div>

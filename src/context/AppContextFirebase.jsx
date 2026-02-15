@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useCallback, u
 import { onAuthChange } from '../lib/firebase.auth';
 import { initializeUserData, getUserData } from '../lib/firebase.userData';
 import { subscribe, create, update, remove, getAll, getUserDocuments } from '../lib/firebase.services';
+import { getWalletSummary } from '../utils/helpers';
 
 export const AppContext = createContext();
 
@@ -628,6 +629,47 @@ export function AppProvider({ children }) {
       dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, updates } });
     },
     deleteTransaction: async (id) => {
+      // Find the transaction first to check for paymentId
+      const transactionToDelete = state.transactions.find(t => t.id === id);
+
+      if (transactionToDelete && transactionToDelete.paymentId) {
+        const paymentId = transactionToDelete.paymentId;
+
+        // 1. Find the wallet(s) that might have this payment and update them
+        state.wallets.forEach(async (wallet) => {
+          if (wallet.payments && wallet.payments.some(p => String(p.id) === String(paymentId))) {
+            const newPayments = wallet.payments.filter(p => String(p.id) !== String(paymentId));
+
+            // Re-calculate unpaidBillAmount and hasUnpaidBill correctly
+            // Important: use current transactions minus the one being deleted for accuracy
+            const remainingTransactions = state.transactions.filter(t => t.id !== id);
+            const summary = getWalletSummary({ ...wallet, payments: newPayments }, remainingTransactions);
+
+            const updates = {
+              payments: newPayments,
+              unpaidBillAmount: summary.unpaidBillAmount,
+              hasUnpaidBill: summary.unpaidBillAmount > 0
+            };
+
+            if (state.user) {
+              await update('wallets', wallet.id, updates);
+            }
+            dispatch({ type: 'UPDATE_WALLET', payload: { id: wallet.id, updates } });
+          }
+        });
+
+        // 2. Find and delete OTHER transactions with the same paymentId
+        // This ensures both the expense and income parts of a bill pay are removed
+        const relatedTransactions = state.transactions.filter(t => t.paymentId === paymentId && t.id !== id);
+        for (const related of relatedTransactions) {
+          if (state.user) {
+            await remove('transactions', related.id);
+          }
+          dispatch({ type: 'DELETE_TRANSACTION', payload: related.id });
+        }
+      }
+
+      // 3. Delete the original transaction
       if (state.user) {
         await remove('transactions', id);
       }
