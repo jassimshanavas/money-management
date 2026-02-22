@@ -5,7 +5,7 @@ import { Plus, X } from 'lucide-react';
 import { parseISO, addMonths, format } from 'date-fns';
 
 export default function AddTransaction() {
-  const { categories, currency, addTransaction, wallets, selectedWallet, transactions, walletTransfer, updateWallet } = useApp();
+  const { categories, currency, addTransaction, wallets, selectedWallet, setSelectedWallet, transactions, walletTransfer, updateWallet } = useApp();
   // Get initial category based on type
   const getInitialCategory = (type) => {
     const typeCategories = categories.filter((cat) => (cat.type || 'expense') === type);
@@ -29,13 +29,18 @@ export default function AddTransaction() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastSubmittedType, setLastSubmittedType] = useState('transaction');
 
-  // Sync walletId with selectedWallet when it changes
+  // Synchronize with global selectedWallet 
   useEffect(() => {
-    if (selectedWallet && selectedWallet !== formData.walletId) {
-      setFormData(prev => ({
-        ...prev,
-        walletId: selectedWallet
-      }));
+    // If we have a selected wallet, and either:
+    // 1. the form doesn't have one yet, OR
+    // 2. the form has '1' (initial default) but the context has a real wallet ID
+    if (selectedWallet && (!formData.walletId || formData.walletId === '1')) {
+      if (formData.walletId !== selectedWallet) {
+        setFormData(prev => ({
+          ...prev,
+          walletId: selectedWallet
+        }));
+      }
     }
   }, [selectedWallet]);
 
@@ -489,6 +494,7 @@ export default function AddTransaction() {
               value={formData.walletId || selectedWallet}
               onChange={(e) => {
                 const newWalletId = e.target.value;
+                setSelectedWallet(newWalletId);
                 if (formData.type === 'billpayment') {
                   const selectedCard = wallets.find(w => w.id === newWalletId);
                   const summary = selectedCard ? getWalletSummary(selectedCard, transactions) : null;

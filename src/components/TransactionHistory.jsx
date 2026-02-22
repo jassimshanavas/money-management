@@ -53,7 +53,7 @@ export default function TransactionHistory() {
         transaction.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         transaction.tag?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = filterCategory === 'All' || transaction.category === filterCategory;
-      const matchesWallet = filterWallet === 'All' || transaction.walletId === filterWallet;
+      const matchesWallet = filterWallet === 'All' || String(transaction.walletId) === String(filterWallet);
       return matchesSearch && matchesCategory && matchesWallet;
     });
 
@@ -74,7 +74,7 @@ export default function TransactionHistory() {
         transaction.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         transaction.tag?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = filterCategory === 'All' || transaction.category === filterCategory;
-      const matchesWallet = filterWallet === 'All' || transaction.walletId === filterWallet;
+      const matchesWallet = filterWallet === 'All' || String(transaction.walletId) === String(filterWallet);
       return matchesSearch && matchesCategory && matchesWallet;
     });
   }, [transactions, searchQuery, filterCategory, filterWallet]);
@@ -582,7 +582,7 @@ function TransactionItem({
   const isTransfer = transaction.isTransfer || transaction.type === 'transfer';
   const displayCategory = isTransfer ? (transaction.transferType === 'interest' ? 'Interest' : 'Transfer') : transaction.category;
   const category = categories.find((c) => c.name === displayCategory) || categories.find(c => c.name === 'Transfer') || categories[0];
-  const wallet = wallets.find((w) => w.id === transaction.walletId);
+  const wallet = wallets.find((w) => String(w.id) === String(transaction.walletId));
   const isDragging = draggedItem?.id === transaction.id;
   const isDragOver = dragOverItem?.id === transaction.id;
 

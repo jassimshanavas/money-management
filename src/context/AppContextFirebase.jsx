@@ -249,15 +249,32 @@ function appReducer(state, action) {
         ...state,
         categories: action.payload,
       };
-    case 'LOAD_DATA':
+    case 'LOAD_DATA': {
+      const wallets = action.payload.wallets
+        ? action.payload.wallets.map(normalizeWallet)
+        : state.wallets;
+
+      // If currently selected wallet '1' is not in the loaded wallets,
+      // or if we have wallets but none are selected, select the first one.
+      let newSelectedWallet = state.selectedWallet;
+      if (wallets.length > 0) {
+        const currentWalletExists = wallets.some(w => String(w.id) === String(state.selectedWallet));
+        if (!currentWalletExists || state.selectedWallet === '1') {
+          // Only override if '1' doesn't exist or we're strictly on the initial default
+          if (!currentWalletExists) {
+            newSelectedWallet = String(wallets[0].id);
+          }
+        }
+      }
+
       return {
         ...state,
         ...action.payload,
         dataLoading: false,
-        wallets: action.payload.wallets
-          ? action.payload.wallets.map(normalizeWallet)
-          : state.wallets,
+        wallets: wallets,
+        selectedWallet: newSelectedWallet
       };
+    }
     case 'SET_DATA_LOADING':
       return { ...state, dataLoading: action.payload };
     default:
