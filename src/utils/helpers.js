@@ -822,15 +822,19 @@ export const getWalletSummary = (wallet, transactions) => {
     let unbilledAmount = 0;
     if (cycleDates?.lastBillingDate) {
       const lastBilling = cycleDates.lastBillingDate;
-      const unbilledExpenses = walletTransactions
-        .filter(t => parseISO(t.date) >= lastBilling && t.type === 'expense' && (!t.isTransfer || t.transferType === 'interest'))
+      const cycleTransactions = walletTransactions.filter(t => parseISO(t.date) >= lastBilling);
+      const { income: ubIncome, expenses: ubExpenses, transfers: ubTransfers } = calculateTotals(cycleTransactions);
+
+      // Filter out bill payments from unbilled income
+      const unbilledBillPayments = cycleTransactions
+        .filter(t => t.type === 'income' && !t.isTransfer && (t.tag === 'bill-payment' || t.category === 'Bill Payment'))
         .reduce((sum, t) => sum + t.amount, 0);
 
-      const unbilledIncome = walletTransactions
-        .filter(t => parseISO(t.date) >= lastBilling && t.type === 'income' && !t.isTransfer && t.tag !== 'bill-payment' && t.category !== 'Bill Payment')
-        .reduce((sum, t) => sum + t.amount, 0);
+      const adjustedUbIncome = ubIncome - unbilledBillPayments;
 
-      unbilledAmount = Math.max(0, unbilledExpenses - unbilledIncome);
+      // Formula: Expenses - (Income + NetTransfers) for the current cycle
+      // Since calculateTotals returns transfers as (In - Out), we use -ubTransfers to get (Out - In)
+      unbilledAmount = Math.max(0, ubExpenses - (adjustedUbIncome + ubTransfers));
     } else {
       unbilledAmount = creditUsed;
     }
