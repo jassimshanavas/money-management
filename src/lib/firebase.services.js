@@ -40,7 +40,7 @@ export const getById = async (collectionName, id) => {
   try {
     const docRef = doc(db, collectionName, id);
     const docSnap = await getDoc(docRef);
-    
+
     if (docSnap.exists()) {
       return { id: docSnap.id, ...docSnap.data() };
     }
@@ -107,12 +107,12 @@ export const queryDocuments = async (collectionName, filters = []) => {
   try {
     const collectionRef = collection(db, collectionName);
     let q = collectionRef;
-    
+
     // Apply filters
     filters.forEach((filter) => {
       q = query(q, where(filter.field, filter.operator, filter.value));
     });
-    
+
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -130,25 +130,28 @@ export const queryDocuments = async (collectionName, filters = []) => {
 export const subscribe = (collectionName, callback, userId = null) => {
   try {
     let q = collection(db, collectionName);
-    
+
     // If userId is provided, filter by it
     if (userId) {
       q = query(q, where('userId', '==', userId));
     }
-    
+
     // Order by date descending for most collections
     if (collectionName === 'transactions' || collectionName === 'notifications') {
       q = query(q, orderBy('date', 'desc'));
     } else if (collectionName === 'goals') {
       q = query(q, orderBy('createdAt', 'desc'));
     }
-    
+
     return onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
       callback(data);
+    }, (error) => {
+      console.error(`Error in onSnapshot for ${collectionName}:`, error);
+      // Catch missing index errors instead of crashing the app
     });
   } catch (error) {
     console.error(`Error subscribing to ${collectionName}:`, error);
@@ -162,10 +165,10 @@ export const subscribe = (collectionName, callback, userId = null) => {
 export const getUserDocuments = async (collectionName, userId) => {
   try {
     if (!userId) return [];
-    
+
     let q;
     const collectionRef = collection(db, collectionName);
-    
+
     // Build query with ordering for collections that support it
     if (collectionName === 'transactions' || collectionName === 'notifications') {
       q = query(
@@ -186,7 +189,7 @@ export const getUserDocuments = async (collectionName, userId) => {
         where('userId', '==', userId)
       );
     }
-    
+
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -221,10 +224,10 @@ export const getUserDocuments = async (collectionName, userId) => {
 export const batchWrite = async (operations) => {
   try {
     const batch = writeBatch(db);
-    
+
     operations.forEach((op) => {
       const docRef = doc(db, op.collection, op.id);
-      
+
       switch (op.type) {
         case 'create':
           batch.set(docRef, { ...op.data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
@@ -237,7 +240,7 @@ export const batchWrite = async (operations) => {
           break;
       }
     });
-    
+
     await batch.commit();
   } catch (error) {
     console.error('Error batch writing:', error);

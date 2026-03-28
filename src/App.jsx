@@ -11,6 +11,7 @@ import CategoryBreakdown from './components/CategoryBreakdown';
 import BudgetTracker from './components/BudgetTracker';
 import Settings from './components/Settings';
 import AIInsights from './components/AIInsights';
+import CategoryTrends from './components/CategoryTrends';
 import SavingsGoals from './components/SavingsGoals';
 import RecurringExpenses from './components/RecurringExpenses';
 import SmartBudgetAssistant from './components/SmartBudgetAssistant';
@@ -39,6 +40,7 @@ import {
   FileText,
   Bell,
   User as UserIcon,
+  Activity,
 } from 'lucide-react';
 
 const views = {
@@ -48,6 +50,7 @@ const views = {
   scanner: { component: ReceiptScanner, icon: Camera, label: 'Scanner' },
   history: { component: TransactionHistory, icon: History, label: 'History' },
   categories: { component: CategoryBreakdown, icon: PieChart, label: 'Categories' },
+  trends: { component: CategoryTrends, icon: Activity, label: 'Trends' },
   budget: { component: BudgetTracker, icon: Target, label: 'Budget' },
   smartBudget: { component: SmartBudgetAssistant, icon: Sparkles, label: 'Smart Budget' },
   forecasting: { component: ExpenseForecasting, icon: TrendingUp, label: 'Forecast' },
@@ -86,9 +89,9 @@ function LocalStorageAppContent() {
 
   return (
     <div className="min-h-screen transition-colors duration-300">
-      <Navigation 
-        currentView={currentView} 
-        setCurrentView={setCurrentView} 
+      <Navigation
+        currentView={currentView}
+        setCurrentView={setCurrentView}
         views={views}
       />
       <main className="pb-20 md:pl-64 md:pb-4 pt-16 md:pt-0">
@@ -111,13 +114,13 @@ function FirebaseAppContent() {
   if (loading) {
     return <LoadingScreen />;
   }
-  
+
   // If we have cached data for THIS user or transactions already loaded, show app immediately
   // The data will update in the background from Firestore
   const currentUserId = localStorage.getItem('currentUserId');
   const hasCachedData = localStorage.getItem('moneyTrackerData') && currentUserId === user?.uid;
   const hasTransactions = appContext.transactions && appContext.transactions.length > 0;
-  
+
   if (user && dataLoading && !hasCachedData && !hasTransactions) {
     return <LoadingScreen />;
   }
@@ -132,9 +135,9 @@ function FirebaseAppContent() {
 
   return (
     <div className="min-h-screen transition-colors duration-300">
-      <Navigation 
-        currentView={currentView} 
-        setCurrentView={setCurrentView} 
+      <Navigation
+        currentView={currentView}
+        setCurrentView={setCurrentView}
         views={views}
       />
       <main className="pb-20 md:pl-64 md:pb-4 pt-16 md:pt-0">
@@ -147,8 +150,8 @@ function FirebaseAppContent() {
 function App() {
   // Check if Firebase config exists (using hardcoded defaults in config file)
   // If env vars are set, use them; otherwise check if defaults in firebase.config.js are set
-  const hasFirebaseConfig = import.meta.env.VITE_FIREBASE_API_KEY || 
-                            (typeof import.meta.env !== 'undefined' && import.meta.env.VITE_FIREBASE_PROJECT_ID);
+  const hasFirebaseConfig = import.meta.env.VITE_FIREBASE_API_KEY ||
+    (typeof import.meta.env !== 'undefined' && import.meta.env.VITE_FIREBASE_PROJECT_ID);
 
   // Use Firebase if config exists (either from env or defaults)
   // Since firebase.config.js has defaults, we'll use Firebase

@@ -1,68 +1,33 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '../hooks/useAppContext';
-import { formatCurrency, formatDate, getTransactionsForMonth, getCategoryTotals, getTagTotals, getAvailableMonths } from '../utils/helpers';
+import { formatCurrency, formatDate, filterByDateRange, getDatePreset, getCategoryTotals, getTagTotals, getAvailableMonths } from '../utils/helpers';
+import TransactionCalendar from './TransactionCalendar';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { Calendar, X, Tag, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
-import { parseISO, format as formatDateFns, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, isToday, startOfDay } from 'date-fns';
+import { parseISO, format as formatDateFns, eachDayOfInterval, startOfMonth, endOfMonth, isSameDay, isToday, startOfDay, differenceInDays } from 'date-fns';
 
 export default function CategoryBreakdown() {
-  const { transactions, currency, categories, deleteTransaction } = useApp();
+  const { transactions, currency, categories, deleteTransaction, wallets, filterWallet, setFilterWallet } = useApp();
   const [activeTab, setActiveTab] = useState('category'); // 'category' or 'tag'
   const [selectedCategoryForView, setSelectedCategoryForView] = useState(null); // Category name to view transactions
   const [selectedTagForView, setSelectedTagForView] = useState(null); // Tag name to view transactions
   const [transactionType, setTransactionType] = useState('expense'); // 'expense' or 'income'
   const [selectedDate, setSelectedDate] = useState(null); // Selected date to filter transactions
+
+  const [dateRange, setDateRange] = useState(() => getDatePreset('month'));
+  const [activePreset, setActivePreset] = useState('month');
+  const [showCalendar, setShowCalendar] = useState(false);
   const dateScrollRef = useRef(null);
   const currentDateRef = useRef(null);
 
-  // Get available months and set default to current month
-  const availableMonths = useMemo(() => getAvailableMonths(transactions), [transactions]);
-  const currentDate = new Date();
-  const currentMonthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
-
-  // Initialize state with default month (as array for multi-select)
-  const [selectedMonths, setSelectedMonths] = useState(() => {
-    const defaultMonth = availableMonths.find(m => m.value === currentMonthKey) || availableMonths[0];
-    return defaultMonth ? [defaultMonth.value] : [];
-  });
-
-  // Update selected months if current month becomes available
-  React.useEffect(() => {
-    if (availableMonths.length > 0 && selectedMonths.length === 0) {
-      const defaultMonth = availableMonths.find(m => m.value === currentMonthKey) || availableMonths[0];
-      if (defaultMonth) {
-        setSelectedMonths([defaultMonth.value]);
-      }
-    }
-    // Remove any selected months that are no longer available
-    const validMonths = selectedMonths.filter(month => availableMonths.find(m => m.value === month));
-    if (validMonths.length !== selectedMonths.length) {
-      setSelectedMonths(validMonths.length > 0 ? validMonths : [availableMonths[0]?.value].filter(Boolean));
-    }
-  }, [availableMonths, currentMonthKey, selectedMonths]);
-
-  // Toggle month selection
-  const toggleMonth = (monthValue) => {
-    setSelectedMonths(prev => {
-      if (prev.includes(monthValue)) {
-        // Don't allow deselecting all months - keep at least one
-        if (prev.length === 1) return prev;
-        return prev.filter(m => m !== monthValue);
-      } else {
-        return [...prev, monthValue];
-      }
-    });
-  };
-
-  // Get transactions for all selected months
+  // Get transactions filtered by dateRange and wallet
   const monthlyTransactions = useMemo(() => {
-    if (selectedMonths.length === 0) return [];
-
-    return selectedMonths.flatMap(monthKey => {
-      const [year, month] = monthKey.split('-').map(Number);
-      return getTransactionsForMonth(transactions, year, month);
-    });
-  }, [transactions, selectedMonths]);
+    let filtered = transactions;
+    if (filterWallet !== 'All') {
+      filtered = filtered.filter(t => String(t.walletId) === String(filterWallet));
+    }
+    return filterByDateRange(filtered, dateRange);
+  }, [transactions, dateRange, filterWallet]);
 
   // Filter transactions by type
   const typeFilteredTransactions = useMemo(() => {
@@ -125,48 +90,39 @@ export default function CategoryBreakdown() {
     return null;
   };
 
-  const selectedMonthLabels = selectedMonths
-    .map(monthKey => availableMonths.find(m => m.value === monthKey)?.label)
-    .filter(Boolean);
-
-  // Get all dates in selected months
+  // Get all dates in selected date range
   const availableDates = useMemo(() => {
-    if (selectedMonths.length === 0) return [];
+    let start = dateRange.from;
+    let end = dateRange.to || new Date();
 
-    const dates = [];
-    const currentDate = new Date();
-    const currentDateStr = formatDateFns(currentDate, 'yyyy-MM-dd');
+    if (!start) {
+      if (monthlyTransactions.length === 0) return [];
+      const oldestTrans = [...monthlyTransactions].sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+      start = parseISO(oldestTrans.date);
+    }
 
-    // Sort months so current month comes first
-    const sortedMonths = [...selectedMonths].sort((a, b) => {
-      const currentMonthKey = `${currentDate.getFullYear()}-${currentDate.getMonth()}`;
-      if (a === currentMonthKey) return -1;
-      if (b === currentMonthKey) return 1;
-      return b.localeCompare(a); // Other months in descending order
-    });
+    // Safety check for extreme ranges (e.g. over 5 years)
+    const MAX_DAYS = 365 * 5;
+    if (differenceInDays(end, start) > MAX_DAYS) {
+      start = new Date(end.getTime() - MAX_DAYS * 24 * 60 * 60 * 1000);
+    }
 
-    sortedMonths.forEach(monthKey => {
-      const [year, month] = monthKey.split('-').map(Number);
-      const monthStart = startOfMonth(new Date(year, month, 1));
-      const monthEnd = endOfMonth(new Date(year, month, 1));
-      const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+    try {
+      const daysInInterval = eachDayOfInterval({ start: startOfDay(start), end: startOfDay(end) });
+      const currentDateStr = formatDateFns(new Date(), 'yyyy-MM-dd');
 
-      daysInMonth.forEach(day => {
-        dates.push({
-          date: day,
-          dateString: formatDateFns(day, 'yyyy-MM-dd'),
-          label: formatDateFns(day, 'MMM dd'),
-          dayLabel: formatDateFns(day, 'EEE'),
-          dayNumber: formatDateFns(day, 'd'),
-          isToday: formatDateFns(day, 'yyyy-MM-dd') === currentDateStr,
-          isCurrentMonth: monthKey === `${currentDate.getFullYear()}-${currentDate.getMonth()}`,
-        });
-      });
-    });
-
-    // Sort by date, ascending order (oldest to newest)
-    return dates.sort((a, b) => a.date - b.date);
-  }, [selectedMonths]);
+      return daysInInterval.map(day => ({
+        date: day,
+        dateString: formatDateFns(day, 'yyyy-MM-dd'),
+        label: formatDateFns(day, 'MMM dd'),
+        dayLabel: formatDateFns(day, 'EEE'),
+        dayNumber: formatDateFns(day, 'd'),
+        isToday: formatDateFns(day, 'yyyy-MM-dd') === currentDateStr,
+      }));
+    } catch (e) {
+      return [];
+    }
+  }, [dateRange, monthlyTransactions]);
 
   // Calculate daily expenses for the selected category/tag
   const dailyExpensesData = useMemo(() => {
@@ -347,82 +303,95 @@ export default function CategoryBreakdown() {
               </button>
             </div>
           </div>
+
+          {/* Wallet Toggle */}
+          <div className="glass-card p-2 animate-slide-up inline-block">
+            <div className="flex gap-2 h-full">
+              <div className="relative flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg px-4 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                <span className="text-xl mr-2 pointer-events-none">💼</span>
+                <select
+                  value={filterWallet}
+                  onChange={(e) => setFilterWallet(e.target.value)}
+                  className="bg-transparent text-slate-700 dark:text-slate-300 font-medium outline-none appearance-none pr-4 cursor-pointer h-full py-2 shadow-none border-none focus:ring-0"
+                >
+                  <option value="All">All Wallets</option>
+                  {wallets.map((wallet) => (
+                    <option key={wallet.id} value={wallet.id}>
+                      {wallet.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Month Selector - Multi-select with checkboxes */}
-        {availableMonths.length > 0 && (
-          <div className="glass-card p-4 mb-4 animate-slide-up">
-            <div className="flex items-center gap-2 mb-3">
-              <Calendar className="text-slate-500 dark:text-slate-400" size={20} />
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Select Months</h3>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {availableMonths.map((month) => {
-                const isSelected = selectedMonths.includes(month.value);
-                return (
-                  <label
-                    key={month.value}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition-all ${isSelected
-                      ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-300'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500 text-slate-600 dark:text-slate-300'
-                      }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleMonth(month.value)}
-                      className="w-4 h-4 text-teal-600 border-slate-300 rounded focus:ring-teal-500 focus:ring-2 cursor-pointer"
-                    />
-                    <span className="text-sm font-medium">{month.label}</span>
-                  </label>
-                );
-              })}
-            </div>
-            {selectedMonths.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">Selected:</span>
-                  {selectedMonthLabels.map((label, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 rounded-full"
-                    >
-                      {label}
-                      {selectedMonths.length > 1 && (
-                        <button
-                          onClick={() => toggleMonth(selectedMonths[idx])}
-                          className="hover:bg-teal-200 dark:hover:bg-teal-800 rounded-full p-0.5 transition-colors"
-                          title="Remove this month"
-                        >
-                          <X size={12} />
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Date Filter */}
+        <div className="glass-card p-4 mb-4 animate-slide-up">
+          <div className="flex flex-wrap gap-2 items-center">
+            {['today', 'week', 'month', 'lastMonth', 'all'].map((preset) => (
+              <button
+                key={preset}
+                onClick={() => {
+                  setActivePreset(preset);
+                  setDateRange(getDatePreset(preset));
+                }}
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${activePreset === preset
+                  ? 'bg-teal-500 text-white shadow-lg'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+              >
+                {preset === 'today' && 'Today'}
+                {preset === 'week' && 'This Week'}
+                {preset === 'month' && 'This Month'}
+                {preset === 'lastMonth' && 'Last Month'}
+                {preset === 'all' && 'All Time'}
+              </button>
+            ))}
 
-        {selectedMonths.length > 0 && (
-          <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
-            Showing {transactionType === 'expense' ? 'expenses' : 'income'} for{' '}
-            <span className="font-semibold text-slate-800 dark:text-white">
-              {selectedMonths.length === 1
-                ? selectedMonthLabels[0]
-                : `${selectedMonths.length} months (${selectedMonthLabels.join(', ')})`}
-            </span>
+            <button
+              onClick={() => setShowCalendar(!showCalendar)}
+              className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 ${showCalendar
+                ? 'bg-teal-500 text-white shadow-lg'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+            >
+              <Calendar size={14} />
+              {showCalendar ? 'Hide' : 'Show'} Calendar
+            </button>
           </div>
-        )}
+
+          {showCalendar && (
+            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <TransactionCalendar
+                transactions={transactions}
+                dateRange={dateRange}
+                onDateRangeChange={(range) => {
+                  setDateRange(range);
+                  setActivePreset('custom');
+                }}
+                currency={currency}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="text-sm text-slate-600 dark:text-slate-400 mb-2">
+          Showing {transactionType === 'expense' ? 'expenses' : 'income'} for{' '}
+          <span className="font-semibold text-slate-800 dark:text-white">
+            {dateRange.from || dateRange.to ? (
+              `${dateRange.from ? formatDate(dateRange.from.toISOString()) : 'Start'} - ${dateRange.to ? formatDate(dateRange.to.toISOString()) : 'Now'}`
+            ) : 'All Time'}
+          </span>
+        </div>
       </div>
 
       {chartData.length === 0 ? (
         <div className="glass-card p-12 text-center animate-fade-in">
           <p className="text-slate-500 dark:text-slate-400 text-lg">
             {activeTab === 'tag'
-              ? `No tagged ${transactionType} data available for the selected month` + (selectedMonths.length > 1 ? 's' : '') + '.'
-              : `No ${transactionType} data available for the selected month` + (selectedMonths.length > 1 ? 's' : '') + '.'}
+              ? `No tagged ${transactionType} data available for the selected period.`
+              : `No ${transactionType} data available for the selected period.`}
           </p>
           <p className="text-slate-400 dark:text-slate-500 text-sm mt-2">
             {activeTab === 'tag'
@@ -435,7 +404,7 @@ export default function CategoryBreakdown() {
           {/* Pie Chart */}
           <div className="glass-card p-6 md:p-8 mb-6 animate-slide-up">
             <h3 className="text-xl font-semibold mb-6 text-slate-800 dark:text-white text-center">
-              {transactionType === 'expense' ? 'Expense' : 'Income'} Distribution by {activeTab === 'category' ? 'Category' : 'Tag'}{selectedMonths.length === 1 ? ` - ${selectedMonthLabels[0]}` : ` (${selectedMonths.length} months)`}
+              {transactionType === 'expense' ? 'Expense' : 'Income'} Distribution by {activeTab === 'category' ? 'Category' : 'Tag'}
             </h3>
             <ResponsiveContainer width="100%" height={400}>
               <PieChart>
@@ -508,16 +477,11 @@ export default function CategoryBreakdown() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-slate-600 dark:text-slate-400 mb-1">
-                  Total {transactionType === 'expense' ? 'Expenses' : 'Income'}{selectedMonths.length === 1 ? ` - ${selectedMonthLabels[0]}` : ` (${selectedMonths.length} months)`}
+                  Total {transactionType === 'expense' ? 'Expenses' : 'Income'}
                 </p>
                 <h3 className="text-3xl font-bold text-slate-800 dark:text-white">
                   {formatCurrency(totalAmount, currency)}
                 </h3>
-                {selectedMonths.length > 1 && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                    Average per month: {formatCurrency(totalAmount / selectedMonths.length, currency)}
-                  </p>
-                )}
               </div>
               <div className="text-4xl">📊</div>
             </div>
@@ -547,7 +511,7 @@ export default function CategoryBreakdown() {
                           {selectedCategoryForView}
                         </h2>
                         <p className="text-sm text-slate-500 dark:text-slate-400">
-                          Transactions for {selectedMonths.length === 1 ? selectedMonthLabels[0] : `${selectedMonths.length} months`}
+                          Transactions for {activePreset === 'all' ? 'All Time' : (dateRange.from ? formatDate(dateRange.from.toISOString()) : 'Start') + ' to ' + (dateRange.to ? formatDate(dateRange.to.toISOString()) : 'Now')}
                         </p>
                       </div>
                     </>
@@ -563,7 +527,7 @@ export default function CategoryBreakdown() {
                         {selectedTagForView}
                       </h2>
                       <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Transactions for {selectedMonths.length === 1 ? selectedMonthLabels[0] : `${selectedMonths.length} months`}
+                        Transactions for {activePreset === 'all' ? 'All Time' : (dateRange.from ? formatDate(dateRange.from.toISOString()) : 'Start') + ' to ' + (dateRange.to ? formatDate(dateRange.to.toISOString()) : 'Now')}
                       </p>
                     </div>
                   </>
@@ -749,7 +713,7 @@ export default function CategoryBreakdown() {
                   <p className="text-slate-400 dark:text-slate-500 text-sm">
                     {selectedDate
                       ? 'Try selecting a different date or clear the date filter.'
-                      : 'Try selecting different months or add more transactions.'
+                      : 'Try adjusting your date range or add more transactions.'
                     }
                   </p>
                 </div>

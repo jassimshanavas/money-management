@@ -5,7 +5,7 @@ import { Moon, Sun, Menu, X, ChevronRight, LogOut, User } from 'lucide-react';
 
 // Organize views into logical groups
 const navigationGroups = {
-  'Core': ['dashboard', 'add', 'history', 'categories', 'budget'],
+  'Core': ['dashboard', 'add', 'history', 'categories', 'trends', 'budget'],
   'Intelligence': ['insights', 'smartBudget', 'forecasting', 'goals'],
   'Tools': ['scanner', 'recurring', 'wallets', 'shared', 'tax', 'reports'],
   'Other': ['notifications', 'profile', 'settings'],
@@ -132,11 +132,10 @@ export default function Navigation({ currentView, setCurrentView, views }) {
                       <button
                         key={key}
                         onClick={() => setCurrentView(key)}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative group ${
-                          currentView === key
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative group ${currentView === key
                             ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
                             : 'hover:bg-white/50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-300'
-                        }`}
+                          }`}
                       >
                         <Icon size={20} />
                         <span className="font-medium flex-1 text-left">{label}</span>
@@ -163,7 +162,7 @@ export default function Navigation({ currentView, setCurrentView, views }) {
               {darkMode ? <Sun size={20} /> : <Moon size={20} />}
               <span className="font-medium">Toggle Theme</span>
             </button>
-            
+
             {user && (
               <button
                 onClick={handleLogout}
@@ -174,7 +173,7 @@ export default function Navigation({ currentView, setCurrentView, views }) {
               </button>
             )}
           </div>
-          
+
           {/* User Info at Bottom */}
           {user && (
             <div className="p-4 border-t border-slate-200/50 dark:border-slate-700/50">
@@ -183,9 +182,9 @@ export default function Navigation({ currentView, setCurrentView, views }) {
                 className="w-full flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-white/80 to-slate-50/80 dark:from-slate-700/80 dark:to-slate-800/80 hover:from-white dark:hover:from-slate-700 dark:hover:to-slate-800 border border-slate-200/50 dark:border-slate-600/50 shadow-md hover:shadow-lg transition-all duration-200"
               >
                 {user.photoURL ? (
-                  <img 
-                    src={user.photoURL} 
-                    alt={user.displayName || 'User'} 
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || 'User'}
                     className="w-10 h-10 rounded-full object-cover border-2 border-white dark:border-slate-600 shadow-sm"
                   />
                 ) : (
@@ -217,11 +216,10 @@ export default function Navigation({ currentView, setCurrentView, views }) {
               <button
                 key={key}
                 onClick={() => setCurrentView(key)}
-                className={`flex flex-col items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-xl transition-all duration-300 min-w-[50px] sm:min-w-[60px] relative ${
-                  currentView === key
+                className={`flex flex-col items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-1.5 sm:py-2 rounded-xl transition-all duration-300 min-w-[50px] sm:min-w-[60px] relative ${currentView === key
                     ? 'text-teal-500 dark:text-teal-400'
                     : 'text-slate-500 dark:text-slate-400'
-                }`}
+                  }`}
               >
                 <Icon size={18} className="sm:w-5 sm:h-5" />
                 <span className="text-[10px] sm:text-xs font-medium leading-tight">{label}</span>
@@ -291,11 +289,10 @@ function MobileSidebar({ currentView, setCurrentView, views, unreadCount, onClos
                         setCurrentView(key);
                         onClose();
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative ${
-                        currentView === key
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative ${currentView === key
                           ? 'bg-gradient-to-r from-teal-500 to-cyan-500 text-white shadow-lg'
                           : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
-                      }`}
+                        }`}
                     >
                       <Icon size={20} />
                       <span className="font-medium flex-1 text-left">{label}</span>
@@ -327,7 +324,7 @@ function MobileSidebar({ currentView, setCurrentView, views, unreadCount, onClos
               <LogOut size={20} />
               <span className="font-medium">Logout</span>
             </button>
-            
+
             {/* User Info at Bottom - Mobile */}
             <button
               onClick={() => {
@@ -337,9 +334,9 @@ function MobileSidebar({ currentView, setCurrentView, views, unreadCount, onClos
               className="w-full flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-white/80 to-slate-50/80 dark:from-slate-700/80 dark:to-slate-800/80 border border-slate-200/50 dark:border-slate-600/50 shadow-md hover:shadow-lg transition-all duration-200"
             >
               {user.photoURL ? (
-                <img 
-                  src={user.photoURL} 
-                  alt={user.displayName || 'User'} 
+                <img
+                  src={user.photoURL}
+                  alt={user.displayName || 'User'}
                   className="w-12 h-12 rounded-full object-cover border-2 border-white dark:border-slate-600 shadow-sm"
                 />
               ) : (

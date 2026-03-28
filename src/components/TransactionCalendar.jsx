@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { formatCurrency } from '../utils/helpers';
 import {
@@ -18,10 +18,21 @@ import {
 } from 'date-fns';
 
 export default function TransactionCalendar({ transactions, dateRange, onDateRangeChange, currency }) {
-    const [currentDate, setCurrentDate] = useState(new Date());
+    const [currentDate, setCurrentDate] = useState(dateRange.from || new Date());
     const [selectionStart, setSelectionStart] = useState(dateRange.from);
     const [selectionEnd, setSelectionEnd] = useState(dateRange.to);
     const [hoverDate, setHoverDate] = useState(null);
+
+    // Sync internal state with external dateRange prop changes
+    useEffect(() => {
+        setSelectionStart(dateRange.from);
+        setSelectionEnd(dateRange.to);
+        if (dateRange.from) {
+            setCurrentDate(dateRange.from);
+        } else {
+            setCurrentDate(new Date());
+        }
+    }, [dateRange.from, dateRange.to]);
 
     // Calculate daily summaries for the current month
     const dailySummaries = useMemo(() => {
