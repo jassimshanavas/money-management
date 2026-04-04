@@ -16,6 +16,7 @@ const normalizeWallet = (wallet) => {
     billingDate: billingDate && billingDate >= 1 && billingDate <= 31 ? billingDate : null,
     lastBillingDate: type === 'credit' ? (wallet.lastBillingDate || null) : null,
     lastBilledAmount: type === 'credit' ? (Number(wallet.lastBilledAmount ?? 0) || 0) : 0,
+    payments: Array.isArray(wallet.payments) ? wallet.payments : [],
   };
 };
 
@@ -202,8 +203,8 @@ function appReducer(state, action) {
         settings: { ...state.settings, ...action.payload },
       };
     case 'LOAD_DATA':
-      return { 
-        ...state, 
+      return {
+        ...state,
         ...action.payload,
         wallets: action.payload.wallets
           ? action.payload.wallets.map(normalizeWallet)
@@ -270,7 +271,7 @@ export function AppProvider({ children }) {
     addTransaction: (transaction) => {
       // Ensure walletId is always set (use selected wallet if not provided)
       const walletId = String(transaction.walletId || state.selectedWallet || state.wallets[0]?.id || '1');
-      
+
       // Ensure date is in ISO format
       let transactionDate = transaction.date;
       if (transactionDate) {
@@ -288,7 +289,7 @@ export function AppProvider({ children }) {
       } else {
         transactionDate = new Date().toISOString();
       }
-      
+
       const newTransaction = {
         ...transaction,
         walletId: walletId, // Always ensure walletId is set as string
@@ -299,7 +300,7 @@ export function AppProvider({ children }) {
         category: transaction.category || '',
         description: transaction.description || '',
       };
-      
+
       dispatch({
         type: 'ADD_TRANSACTION',
         payload: newTransaction,
@@ -341,6 +342,47 @@ export function AppProvider({ children }) {
     },
     deleteWallet: (id) => {
       dispatch({ type: 'DELETE_WALLET', payload: id });
+    },
+    walletTransfer: (transferData) => {
+      const { sourceWalletId, destinationWalletId, amount, interest = 0, description, date, category } = transferData;
+
+      // Source wallet expense (the principal amount)
+      addTransaction({
+        type: 'expense',
+        category: category || 'Transfer',
+        amount: amount,
+        walletId: sourceWalletId,
+        date: date,
+        description: description || 'Wallet Transfer',
+        isTransfer: true,
+        transferType: 'source_debit'
+      });
+
+      // Interest/Fee expense if applicable
+      if (interest > 0) {
+        addTransaction({
+          type: 'expense',
+          category: 'Interest',
+          amount: interest,
+          walletId: sourceWalletId,
+          date: date,
+          description: `Interest/Fee for transfer: ${description || ''}`,
+          isTransfer: true,
+          transferType: 'interest'
+        });
+      }
+
+      // Destination wallet income
+      addTransaction({
+        type: 'income',
+        category: category || 'Transfer',
+        amount: amount,
+        walletId: destinationWalletId,
+        date: date,
+        description: description || 'Wallet Transfer',
+        isTransfer: true,
+        transferType: 'destination_credit'
+      });
     },
     setSelectedWallet: (id) => {
       dispatch({ type: 'SET_SELECTED_WALLET', payload: id });

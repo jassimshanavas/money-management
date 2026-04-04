@@ -415,13 +415,14 @@ export function processBillingCycle(wallet, transactions, forceAdvance = false) 
   if (shouldAdvance && lastBillingDate) {
     const currentSummary = getWalletSummary(wallet, transactions);
     const exactUnbilledAmount = currentSummary.unbilledAmount || 0;
-    const roundedBilledAmount = Math.round(exactUnbilledAmount);
-
+    // When advancing cycle:
+    // - The unbilled amount becomes the new Last Billed Amount
+    // - This new billed amount starts as unpaid
+    // - DO NOT reset payments array, as it's used for historical record keeping
     return {
       lastBillingDate: nextBillingDate.toISOString(),
       lastBilledAmount: roundedBilledAmount,
       dueDate: nextBillDueDate.toISOString(), // Due date for the NEW bill
-      payments: [],
       hasUnpaidBill: roundedBilledAmount > 0,
       unpaidBillAmount: roundedBilledAmount,
     };

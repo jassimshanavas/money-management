@@ -35,6 +35,8 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
         const maxCycles = 24; // Show up to 24 months of history
         let cycleCount = 0;
         let isFirstCycle = true;
+        // Global across all cycles to prevent cross-cycle double-counting
+        const seenPaymentIds = new Set();
 
         while (currentBillingDate <= today && cycleCount < maxCycles) {
             const nextBillingDate = addMonths(currentBillingDate, 1);
@@ -83,14 +85,54 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
             const carryforwardToNext = exactBilledAmount - billedAmount;
 
             // Get payments made for this cycle
-            const payments = (wallet.payments || []).filter(p => {
-                // Use explicit mapping if available
-                if (p.billingCycleDate) {
-                    return new Date(p.billingCycleDate).toISOString() === currentBillingDate.toISOString();
+            // Map payments by date: payment made AFTER statement generated (nextBillingDate)
+            // and BEFORE next statement (addMonths(nextBillingDate, 1))
+            const payments = [];
+            const statementDate = nextBillingDate;
+            const nextStatementDate = addMonths(nextBillingDate, 1);
+
+            // 1. From wallet.payments — always match by payment date vs statement window
+            (wallet.payments || []).forEach(p => {
+                // Skip if already assigned to another billing cycle
+                if (p.id && seenPaymentIds.has(String(p.id))) return;
+
+                const pDate = parseISO(p.date);
+                const matches = pDate >= statementDate && pDate < nextStatementDate;
+
+                if (matches) {
+                    payments.push(p);
+                    if (p.id) seenPaymentIds.add(String(p.id));
+                    if (p.paymentId) seenPaymentIds.add(String(p.paymentId));
                 }
-                // Fallback to date-based mapping
-                const paymentDate = parseISO(p.date);
-                return paymentDate >= currentBillingDate && paymentDate < nextBillingDate;
+            });
+
+            // 2. From transactions (backup/reconciliation)
+            // Scan ALL wallet transactions (not just cycleTransactions) for bill payments
+            // that fall in this cycle's payment window
+            walletTransactions.forEach(t => {
+                const isBillPayment = t.tag === 'bill-payment' || t.category === 'Bill Payment';
+                if (isBillPayment && t.type === 'income') {
+                    const transactionId = String(t.id);
+                    const linkedPaymentId = t.paymentId ? String(t.paymentId) : null;
+
+                    // Skip if already matched via wallet.payments or another cycle
+                    if (seenPaymentIds.has(transactionId) || (linkedPaymentId && seenPaymentIds.has(linkedPaymentId))) {
+                        return;
+                    }
+
+                    // Match by same payment-date window
+                    const tDate = parseISO(t.date);
+                    if (tDate >= statementDate && tDate < nextStatementDate) {
+                        payments.push({
+                            id: t.id,
+                            amount: t.amount,
+                            date: t.date,
+                            description: t.description,
+                            type: 'from-transaction'
+                        });
+                        seenPaymentIds.add(transactionId);
+                    }
+                }
             });
 
             const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);

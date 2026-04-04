@@ -87,6 +87,14 @@ export default function AddTransaction() {
         return;
       }
 
+      // Auto-determine billingCycleDate if not explicitly set by clicking a cycle button
+      let finalBillingCycleDate = formData.billingCycleDate;
+      if (!finalBillingCycleDate && billingCycles.length > 0) {
+        // Assign to the oldest unpaid cycle (billingCycles is most-recent-first)
+        const oldestUnpaidCycle = billingCycles[billingCycles.length - 1];
+        finalBillingCycleDate = oldestUnpaidCycle.billingDate.toISOString();
+      }
+
       if (paymentAmount > totalOwed) {
         const confirm = window.confirm(
           `Payment amount (${formatCurrency(paymentAmount, currency)}) exceeds total owed (${formatCurrency(totalOwed, currency)}). Continue anyway?`
@@ -122,7 +130,7 @@ export default function AddTransaction() {
         id: Date.now().toString(),
         amount: paymentAmount,
         date: paymentDate, // Actual payment date
-        billingCycleDate: formData.billingCycleDate, // Map to specific cycle for history purposes
+        billingCycleDate: finalBillingCycleDate, // Map to specific cycle for history purposes
         description: formData.description || `Bill Payment from ${paymentSource.name}`,
         sourceWalletId: paymentSource.id,
         actualPaymentDate: formData.date || new Date().toISOString().split('T')[0]
@@ -348,15 +356,10 @@ export default function AddTransaction() {
       const billedAmount = Math.round(exactBilledAmount);
       const carryforwardToNext = exactBilledAmount - billedAmount;
 
+      // Match payments by date: paid AFTER statement (nextBillingDate), before next statement
       const payments = (activeWallet.payments || []).filter(p => {
-        // Use explicit mapping if available
-        if (p.billingCycleDate) {
-          // Compare ISO strings or midnight timestamps
-          return new Date(p.billingCycleDate).toISOString() === currentBillingDate.toISOString();
-        }
-        // Fallback to date-based mapping for legacy payments
         const paymentDate = parseISO(p.date);
-        return paymentDate >= currentBillingDate && paymentDate < nextBillingDate;
+        return paymentDate >= nextBillingDate && paymentDate < addMonths(nextBillingDate, 1);
       });
 
       const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
