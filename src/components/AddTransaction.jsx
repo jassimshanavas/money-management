@@ -5,7 +5,7 @@ import { Plus, X } from 'lucide-react';
 import { parseISO, addMonths, format } from 'date-fns';
 
 export default function AddTransaction() {
-  const { categories, currency, addTransaction, wallets, selectedWallet, setSelectedWallet, transactions, walletTransfer, updateWallet } = useApp();
+  const { categories, currency, addTransaction, wallets, selectedWallet, setSelectedWallet, transactions, emiLoans, walletTransfer, updateWallet } = useApp();
   // Get initial category based on type
   const getInitialCategory = (type) => {
     const typeCategories = categories.filter((cat) => (cat.type || 'expense') === type);
@@ -60,7 +60,7 @@ export default function AddTransaction() {
       }
 
 
-      const creditCardSummary = getWalletSummary(creditCard, transactions);
+      const creditCardSummary = getWalletSummary(creditCard, transactions, emiLoans);
       const unpaidBill = creditCardSummary.unpaidBillAmount || 0;
       const unbilledAmount = creditCardSummary.unbilledAmount || 0;
       const totalOwed = unpaidBill + unbilledAmount;
@@ -105,7 +105,7 @@ export default function AddTransaction() {
       // Check if payment source has enough balance
       const sourceBalance = paymentSource.type === 'credit'
         ? (paymentSource.creditLimit || 0) - (paymentSource.creditUsed || 0)
-        : getWalletSummary(paymentSource, transactions).calculatedBalance;
+        : getWalletSummary(paymentSource, transactions, emiLoans).calculatedBalance;
 
       if (paymentAmount > sourceBalance) {
         alert(`Insufficient balance in ${paymentSource.name}. Available: ${formatCurrency(sourceBalance, currency)}`);
@@ -290,7 +290,7 @@ export default function AddTransaction() {
   const filteredCategories = categories.filter((cat) => (cat.type || 'expense') === formData.type);
   const activeWalletId = formData.walletId || selectedWallet;
   const activeWallet = wallets.find((wallet) => wallet.id === activeWalletId);
-  const walletSummary = activeWallet ? getWalletSummary(activeWallet, transactions) : null;
+  const walletSummary = activeWallet ? getWalletSummary(activeWallet, transactions, emiLoans) : null;
 
   // Calculate billing history for bill payment type
   const billingCycles = useMemo(() => {
@@ -462,11 +462,11 @@ export default function AddTransaction() {
                   // Find first credit card with any outstanding balance
                   const creditWallet = wallets.find(w => {
                     if (w.type !== 'credit') return false;
-                    const summary = getWalletSummary(w, transactions);
+                    const summary = getWalletSummary(w, transactions, emiLoans);
                     return (summary.unpaidBillAmount || 0) > 0 || (summary.unbilledAmount || 0) > 0;
                   });
                   const paymentSource = wallets.find(w => w.type !== 'credit');
-                  const summary = creditWallet ? getWalletSummary(creditWallet, transactions) : null;
+                  const summary = creditWallet ? getWalletSummary(creditWallet, transactions, emiLoans) : null;
                   const totalOwed = summary ? (summary.unpaidBillAmount || 0) + (summary.unbilledAmount || 0) : 0;
                   setFormData({
                     ...formData,
@@ -500,7 +500,7 @@ export default function AddTransaction() {
                 setSelectedWallet(newWalletId);
                 if (formData.type === 'billpayment') {
                   const selectedCard = wallets.find(w => w.id === newWalletId);
-                  const summary = selectedCard ? getWalletSummary(selectedCard, transactions) : null;
+                  const summary = selectedCard ? getWalletSummary(selectedCard, transactions, emiLoans) : null;
                   const totalOwed = summary ? (summary.unpaidBillAmount || 0) + (summary.unbilledAmount || 0) : 0;
                   setFormData({
                     ...formData,
@@ -516,7 +516,7 @@ export default function AddTransaction() {
               {(formData.type === 'billpayment'
                 ? wallets.filter(w => {
                   if (w.type !== 'credit') return false;
-                  const summary = getWalletSummary(w, transactions);
+                  const summary = getWalletSummary(w, transactions, emiLoans);
                   return (summary.unpaidBillAmount || 0) > 0 || (summary.unbilledAmount || 0) > 0;
                 })
                 : wallets
@@ -524,7 +524,7 @@ export default function AddTransaction() {
                 <option key={wallet.id} value={wallet.id}>
                   {wallet.icon} {wallet.name}
                   {formData.type === 'billpayment' && (() => {
-                    const summary = getWalletSummary(wallet, transactions);
+                    const summary = getWalletSummary(wallet, transactions, emiLoans);
                     const totalOwed = (summary.unpaidBillAmount || 0) + (summary.unbilledAmount || 0);
                     return ` - ${formatCurrency(totalOwed, currency)} owed`;
                   })()}
@@ -533,7 +533,7 @@ export default function AddTransaction() {
             </select>
             {formData.type === 'billpayment' && wallets.filter(w => {
               if (w.type !== 'credit') return false;
-              const summary = getWalletSummary(w, transactions);
+              const summary = getWalletSummary(w, transactions, emiLoans);
               return (summary.unpaidBillAmount || 0) > 0 || (summary.unbilledAmount || 0) > 0;
             }).length === 0 && (
                 <div className="mt-2 p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
@@ -612,7 +612,7 @@ export default function AddTransaction() {
                 <option value="">Select payment source</option>
                 {wallets.filter(w => w.type !== 'credit').map((wallet) => (
                   <option key={wallet.id} value={wallet.id}>
-                    {wallet.icon} {wallet.name} ({formatCurrency(getWalletSummary(wallet, transactions).calculatedBalance, currency)})
+                    {wallet.icon} {wallet.name} ({formatCurrency(getWalletSummary(wallet, transactions, emiLoans).calculatedBalance, currency)})
                   </option>
                 ))}
               </select>

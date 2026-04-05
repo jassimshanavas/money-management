@@ -12,6 +12,7 @@ import {
 import { Search, Filter, Trash2, X, Edit2, Calendar, TrendingUp, TrendingDown, ArrowUpDown, ChevronDown, GripVertical, ChevronUp } from 'lucide-react';
 import EditTransactionModal from './EditTransactionModal';
 import TransactionCalendar from './TransactionCalendar';
+import ConvertToEMI from './ConvertToEMI';
 
 export default function TransactionHistory() {
   const {
@@ -33,6 +34,7 @@ export default function TransactionHistory() {
     setSortOrder,
     deleteTransaction,
     updateTransaction,
+    emiLoans,
   } = useApp();
 
   const [editingTransaction, setEditingTransaction] = useState(null);
@@ -42,6 +44,7 @@ export default function TransactionHistory() {
   const [reorderMode, setReorderMode] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
   const [dragOverItem, setDragOverItem] = useState(null);
+  const [emiTransaction, setEmiTransaction] = useState(null);
   const scrollPositionRef = React.useRef(0);
   const containerRef = React.useRef(null);
 
@@ -539,6 +542,7 @@ export default function TransactionHistory() {
               handleDrop={handleDrop}
               moveTransaction={moveTransaction}
               setEditingTransaction={setEditingTransaction}
+              setEmiTransaction={setEmiTransaction}
               handleDelete={handleDelete}
               formatCurrency={formatCurrency}
               formatDate={formatDate}
@@ -552,6 +556,11 @@ export default function TransactionHistory() {
         isOpen={!!editingTransaction}
         onClose={() => setEditingTransaction(null)}
         transaction={editingTransaction}
+      />
+      <ConvertToEMI
+        isOpen={!!emiTransaction}
+        onClose={() => setEmiTransaction(null)}
+        transaction={emiTransaction}
       />
     </div>
   );
@@ -574,6 +583,7 @@ function TransactionItem({
   handleDrop,
   moveTransaction,
   setEditingTransaction,
+  setEmiTransaction,
   handleDelete,
   formatCurrency,
   formatDate
@@ -585,6 +595,12 @@ function TransactionItem({
   const wallet = wallets.find((w) => String(w.id) === String(transaction.walletId));
   const isDragging = draggedItem?.id === transaction.id;
   const isDragOver = dragOverItem?.id === transaction.id;
+  const canConvertToEMI =
+    wallet?.type === 'credit' &&
+    transaction.type === 'expense' &&
+    !transaction.isTransfer &&
+    !transaction.emiLoanId &&
+    !String(transaction.tag || '').startsWith('emi-');
 
   return (
     <div
@@ -680,6 +696,12 @@ function TransactionItem({
                       # {transaction.tag}
                     </span>
                   )}
+
+                  {transaction.isEmiConverted && (
+                    <span className="px-2.5 py-1 rounded-full bg-amber-50/90 dark:bg-amber-900/30 text-[10px] sm:text-xs font-black text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-800/40 whitespace-nowrap">
+                      EMI
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -730,6 +752,16 @@ function TransactionItem({
             </button>
           </div>
 
+          {canConvertToEMI && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setEmiTransaction(transaction); }}
+              disabled={transaction.isEmiConverted}
+              className="mt-3 w-full flex items-center justify-center gap-2.5 py-3 rounded-2xl bg-slate-900 dark:bg-teal-500 text-white font-bold text-xs disabled:opacity-50"
+            >
+              {transaction.isEmiConverted ? 'Already converted to EMI' : 'Convert to EMI'}
+            </button>
+          )}
+
           <p className="text-[10px] text-center mt-4 text-slate-400 dark:text-slate-500 font-medium uppercase tracking-widest">
             Tap header to collapse
           </p>
@@ -753,6 +785,16 @@ function TransactionItem({
           >
             <Trash2 size={18} strokeWidth={2.5} />
           </button>
+          {canConvertToEMI && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setEmiTransaction(transaction); }}
+              disabled={transaction.isEmiConverted}
+              className="px-4 h-11 rounded-2xl bg-slate-900 dark:bg-teal-500 shadow-xl border border-white/40 dark:border-slate-700/50 flex items-center justify-center text-white text-sm font-semibold disabled:opacity-50 transition-all duration-300 active:scale-90"
+              title="Convert to EMI"
+            >
+              {transaction.isEmiConverted ? 'EMI' : 'Convert to EMI'}
+            </button>
+          )}
         </div>
       )}
     </div>

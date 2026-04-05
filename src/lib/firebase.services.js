@@ -24,8 +24,8 @@ export const getAll = async (collectionName) => {
   try {
     const querySnapshot = await getDocs(collection(db, collectionName));
     return querySnapshot.docs.map((doc) => ({
-      id: doc.id,
       ...doc.data(),
+      id: doc.id, // Always use Firestore doc ID, not any stored 'id' field in data
     }));
   } catch (error) {
     console.error(`Error getting ${collectionName}:`, error);
@@ -42,7 +42,7 @@ export const getById = async (collectionName, id) => {
     const docSnap = await getDoc(docRef);
 
     if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() };
+      return { ...docSnap.data(), id: docSnap.id }; // id last so Firestore ID wins
     }
     return null;
   } catch (error) {
@@ -53,6 +53,8 @@ export const getById = async (collectionName, id) => {
 
 /**
  * Create a new document
+ * NOTE: Do NOT pass a temporary client-side 'id' field in data — it will be
+ * stored as a Firestore field and can cause confusion. Strip it before calling.
  */
 export const create = async (collectionName, data) => {
   try {
@@ -62,7 +64,8 @@ export const create = async (collectionName, data) => {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    return { id: docRef.id, ...data };
+    // id last: Firestore-assigned doc ID overrides any 'id' field that was in data
+    return { ...data, id: docRef.id };
   } catch (error) {
     console.error(`Error creating ${collectionName}:`, error);
     throw error;
@@ -79,7 +82,7 @@ export const update = async (collectionName, id, data) => {
       ...data,
       updatedAt: serverTimestamp(),
     });
-    return { id, ...data };
+    return { ...data, id };
   } catch (error) {
     console.error(`Error updating ${collectionName}/${id}:`, error);
     throw error;
@@ -115,8 +118,8 @@ export const queryDocuments = async (collectionName, filters = []) => {
 
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map((doc) => ({
-      id: doc.id,
       ...doc.data(),
+      id: doc.id, // Always use Firestore doc ID
     }));
   } catch (error) {
     console.error(`Error querying ${collectionName}:`, error);
@@ -134,20 +137,40 @@ export const subscribe = (collectionName, callback, userId = null) => {
     // If userId is provided, filter by it
     if (userId) {
       q = query(q, where('userId', '==', userId));
-    }
-
-    // Order by date descending for most collections
-    if (collectionName === 'transactions' || collectionName === 'notifications') {
-      q = query(q, orderBy('date', 'desc'));
-    } else if (collectionName === 'goals') {
-      q = query(q, orderBy('createdAt', 'desc'));
+      // NOTE: Combining where('userId') + orderBy('date') requires a composite
+      // index in Firestore. To avoid that dependency, we sort client-side below.
+    } else {
+      // No userId filter — safe to add server-side orderBy
+      if (collectionName === 'transactions' || collectionName === 'notifications') {
+        q = query(q, orderBy('date', 'desc'));
+      } else if (collectionName === 'goals') {
+        q = query(q, orderBy('createdAt', 'desc'));
+      }
     }
 
     return onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
+      let data = snapshot.docs.map((doc) => ({
         ...doc.data(),
+        id: doc.id, // Always use Firestore doc ID, not any stored 'id' field in data
       }));
+
+      // Client-side sort when userId filter is applied (avoids composite index)
+      if (userId) {
+        if (collectionName === 'transactions' || collectionName === 'notifications') {
+          data = data.sort((a, b) => {
+            const da = a.date ? new Date(a.date) : new Date(0);
+            const db2 = b.date ? new Date(b.date) : new Date(0);
+            return db2 - da;
+          });
+        } else if (collectionName === 'goals') {
+          data = data.sort((a, b) => {
+            const da = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+            const db2 = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+            return db2 - da;
+          });
+        }
+      }
+
       callback(data);
     }, (error) => {
       console.error(`Error in onSnapshot for ${collectionName}:`, error);
@@ -170,17 +193,22 @@ export const getUserDocuments = async (collectionName, userId) => {
     const collectionRef = collection(db, collectionName);
 
     // Build query with ordering for collections that support it
-    if (collectionName === 'transactions' || collectionName === 'notifications') {
+    if (collectionName === 'transactions') {
+      // Prefer server-side if index exists, but we'll sort client-side regardless for consistency if it fails
       q = query(
         collectionRef,
-        where('userId', '==', userId),
-        orderBy('date', 'desc')
+        where('userId', '==', userId)
+      );
+    } else if (collectionName === 'notifications') {
+      // notifications: avoid composite index — filter only, sort client-side
+      q = query(
+        collectionRef,
+        where('userId', '==', userId)
       );
     } else if (collectionName === 'goals') {
       q = query(
         collectionRef,
-        where('userId', '==', userId),
-        orderBy('createdAt', 'desc')
+        where('userId', '==', userId)
       );
     } else {
       // For other collections, just filter by userId
@@ -191,30 +219,43 @@ export const getUserDocuments = async (collectionName, userId) => {
     }
 
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => ({
-      id: doc.id,
+    let data = querySnapshot.docs.map((doc) => ({
       ...doc.data(),
+      id: doc.id, // Always use Firestore doc ID
     }));
+
+    // Client-side sort to avoid composite index requirements
+    if (collectionName === 'transactions' || collectionName === 'notifications') {
+      data = data.sort((a, b) => {
+        const da = a.date ? new Date(a.date) : new Date(0);
+        const db2 = b.date ? new Date(b.date) : new Date(0);
+        return db2 - da;
+      });
+    } else if (collectionName === 'goals') {
+      data = data.sort((a, b) => {
+        const da = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt || 0);
+        const db2 = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt || 0);
+        return db2 - da;
+      });
+    }
+
+    return data;
   } catch (error) {
     console.error(`Error getting ${collectionName} for user:`, error);
-    // If orderBy fails (missing index), try without it
-    if (error.code === 'failed-precondition' || error.code === 'unavailable') {
-      try {
-        const q = query(
-          collection(db, collectionName),
-          where('userId', '==', userId)
-        );
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-      } catch (retryError) {
-        console.error(`Error retrying ${collectionName}:`, retryError);
-        return [];
-      }
+    // Fallback search without specific ordering if not already handled
+    try {
+      const q = query(
+        collection(db, collectionName),
+        where('userId', '==', userId)
+      );
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map((doc) => ({
+        ...doc.data(),
+        id: doc.id,
+      }));
+    } catch (retryError) {
+      return [];
     }
-    return [];
   }
 };
 
@@ -247,4 +288,3 @@ export const batchWrite = async (operations) => {
     throw error;
   }
 };
-

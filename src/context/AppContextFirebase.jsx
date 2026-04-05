@@ -3,6 +3,7 @@ import { onAuthChange } from '../lib/firebase.auth';
 import { initializeUserData, getUserData } from '../lib/firebase.userData';
 import { subscribe, create, update, remove, getAll, getUserDocuments } from '../lib/firebase.services';
 import { getWalletSummary } from '../utils/helpers';
+import { calculateTotalCost, generateLoanNumber } from '../utils/emiCalculator';
 
 export const AppContext = createContext();
 
@@ -47,6 +48,7 @@ const initialState = {
   sharedExpenses: [],
   receipts: [],
   notifications: [],
+  emiLoans: [],
   currency: 'USD',
   darkMode: localStorage.getItem('darkMode') === 'true' || false,
   searchQuery: '',
@@ -73,6 +75,134 @@ const initialState = {
     aiInsights: true,
     cloudSync: false,
   },
+};
+
+const rankEMILoan = (loan) => {
+  let score = 0;
+  if (loan?.userId) score += 4;
+  if (loan?.id && !String(loan.id).startsWith('emi_')) score += 2;
+  if (loan?.createdAt) score += 1;
+  return score;
+};
+
+const dedupeEMILoans = (emiLoans = []) => {
+  const byKey = new Map();
+
+  emiLoans.forEach((loan) => {
+    const key = loan?.transactionId ? `txn:${loan.transactionId}` : `id:${loan?.id}`;
+    const existing = byKey.get(key);
+    if (!existing || rankEMILoan(loan) > rankEMILoan(existing)) {
+      byKey.set(key, loan);
+    }
+  });
+
+  return Array.from(byKey.values());
+};
+
+const toISODate = (value) => {
+  if (!value) return new Date().toISOString();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+};
+
+const addDaysISO = (value, days) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return toISODate(value);
+  parsed.setDate(parsed.getDate() + Number(days || 0));
+  return parsed.toISOString();
+};
+
+const EMI_GENERATED_TAGS = new Set([
+  'emi-processing-fee',
+  'emi-principal',
+  'emi-interest',
+  'emi-igst',
+  'emi-payment',
+]);
+
+const transactionBelongsToCurrentUser = (transaction, userId) =>
+  !!transaction && !!userId && transaction.userId === userId;
+
+const getInitialEMICharges = ({ processingFee, igstOnProcessingFee, statementDate }) => {
+  const scheduledDate = toISODate(statementDate || new Date().toISOString());
+  return [
+    Number(processingFee) > 0 ? {
+      key: 'processing_fee',
+      label: 'Processing fee',
+      amount: Number(processingFee),
+      scheduledDate,
+      posted: false,
+      postedDate: null,
+    } : null,
+    Number(igstOnProcessingFee) > 0 ? {
+      key: 'processing_fee_igst',
+      label: 'IGST on processing fee',
+      amount: Number(igstOnProcessingFee),
+      scheduledDate,
+      posted: false,
+      postedDate: null,
+    } : null,
+  ].filter(Boolean);
+};
+
+const buildEMILoanPayload = (loanData, transaction) => {
+  const principal = Number(loanData.principalAmount ?? transaction?.amount ?? 0);
+  const annualRate = Number(loanData.interestRatePA ?? loanData.interestRate ?? 18);
+  const tenureMonths = Number(loanData.tenureMonths ?? 3);
+  const processingFee = Number(loanData.processingFee ?? 0);
+  const igstRate = Number(loanData.igstRate ?? 18);
+  const firstEMIDate = loanData.firstEMIDate || loanData.loanBookedDate || new Date().toISOString();
+  const loanBookingDate = loanData.loanBookingDate || new Date().toISOString();
+  const statementDate = loanData.statementDate || firstEMIDate;
+  const firstPaymentDate = loanData.firstPaymentDate || firstEMIDate;
+
+  const totals = calculateTotalCost(
+    principal,
+    annualRate,
+    tenureMonths,
+    processingFee,
+    igstRate,
+    firstEMIDate,
+    { loanBookingDate, statementDate, firstPaymentDate }
+  );
+
+  return {
+    id: loanData.id || `emi_${Date.now()}`,
+    walletId: String(loanData.walletId || transaction?.walletId || ''),
+    transactionId: transaction?.id ?? loanData.transactionId,
+    transactionDescription:
+      transaction?.description || loanData.transactionDescription || transaction?.category || 'Card transaction',
+    originalTransactionDate: transaction?.date || loanData.originalTransactionDate || new Date().toISOString(),
+    loanNumber: loanData.loanNumber || generateLoanNumber(),
+    loanBookedDate: loanData.loanBookedDate || new Date().toISOString(),
+    loanType: loanData.loanType || 'OFFUS EMI',
+    principalAmount: principal,
+    interestRatePA: annualRate,
+    tenureMonths,
+    processingFee: totals.processingFee,
+    igstOnProcessingFee: totals.igstOnProcessingFee,
+    igstRate,
+    monthlyEMI: totals.monthlyEMI,
+    totalInterest: totals.totalInterest,
+    totalIGSTOnInterest: totals.totalIGSTOnInterest,
+    totalCost: totals.totalCost,
+    totalProcessingCost: totals.totalProcessingCost,
+    loanBookingDate: toISODate(loanBookingDate),
+    statementDate: toISODate(statementDate),
+    firstPaymentDate: toISODate(firstPaymentDate),
+    firstEMIDate: toISODate(firstEMIDate),
+    schedule: totals.schedule,
+    upcomingCharges: getInitialEMICharges({
+      processingFee: totals.processingFee,
+      igstOnProcessingFee: totals.igstOnProcessingFee,
+      statementDate,
+    }),
+    outstandingPrincipal: principal,
+    paidEMIs: 0,
+    remainingEMIs: tenureMonths,
+    status: 'active',
+    createdAt: new Date().toISOString(),
+  };
 };
 
 function appReducer(state, action) {
@@ -250,33 +380,59 @@ function appReducer(state, action) {
         categories: action.payload,
       };
     case 'LOAD_DATA': {
-      const wallets = action.payload.wallets
-        ? action.payload.wallets.map(normalizeWallet)
-        : state.wallets;
-
-      // If currently selected wallet '1' is not in the loaded wallets,
-      // or if we have wallets but none are selected, select the first one.
+      const wallets = action.payload.wallets ? action.payload.wallets.map(normalizeWallet) : state.wallets;
       let newSelectedWallet = state.selectedWallet;
       if (wallets.length > 0) {
         const currentWalletExists = wallets.some(w => String(w.id) === String(state.selectedWallet));
-        if (!currentWalletExists || state.selectedWallet === '1') {
-          // Only override if '1' doesn't exist or we're strictly on the initial default
-          if (!currentWalletExists) {
-            newSelectedWallet = String(wallets[0].id);
-          }
-        }
+        if (!currentWalletExists) newSelectedWallet = String(wallets[0].id);
       }
-
       return {
         ...state,
         ...action.payload,
         dataLoading: false,
-        wallets: wallets,
-        selectedWallet: newSelectedWallet
+        wallets,
+        emiLoans: action.payload.emiLoans ? dedupeEMILoans(action.payload.emiLoans) : state.emiLoans,
+        selectedWallet: newSelectedWallet,
       };
     }
     case 'SET_DATA_LOADING':
       return { ...state, dataLoading: action.payload };
+    case 'ADD_EMI_LOAN':
+      return { ...state, emiLoans: dedupeEMILoans([...state.emiLoans, action.payload]) };
+    case 'SET_EMI_LOANS':
+      return { ...state, emiLoans: dedupeEMILoans(action.payload) };
+    case 'UPDATE_EMI_LOAN':
+      return { ...state, emiLoans: state.emiLoans.map((l) => l.id === action.payload.id ? { ...l, ...action.payload.updates } : l) };
+    case 'DELETE_EMI_LOAN':
+      return { ...state, emiLoans: state.emiLoans.filter((l) => l.id !== action.payload) };
+    case 'PAY_EMI_INSTALLMENT': {
+      const { loanId, monthIndex, paidDate, paidTransactionId } = action.payload;
+      return {
+        ...state,
+        emiLoans: state.emiLoans.map((loan) => {
+          if (loan.id !== loanId) return loan;
+          const updatedSchedule = loan.schedule.map((entry, idx) => idx === monthIndex ? { ...entry, status: 'paid', paidDate, paidTransactionId } : entry);
+          const paidEMIs = updatedSchedule.filter(s => s.status === 'paid').length;
+          const remainingEMIs = updatedSchedule.length - paidEMIs;
+          const outstandingPrincipal = updatedSchedule.filter(s => s.status !== 'paid').reduce((sum, s) => sum + s.principalAmount, 0);
+          return { ...loan, schedule: updatedSchedule, paidEMIs, remainingEMIs, outstandingPrincipal, status: remainingEMIs === 0 ? 'completed' : 'active' };
+        }),
+      };
+    }
+    case 'UNPAY_EMI_INSTALLMENT': {
+      const { loanId, monthIndex } = action.payload;
+      return {
+        ...state,
+        emiLoans: state.emiLoans.map((loan) => {
+          if (loan.id !== loanId) return loan;
+          const updatedSchedule = loan.schedule.map((entry, idx) => idx === monthIndex ? { ...entry, status: 'pending', paidDate: null, paidTransactionId: null } : entry);
+          const paidEMIs = updatedSchedule.filter(e => e.status === 'paid').length;
+          const remainingEMIs = updatedSchedule.length - paidEMIs;
+          const outstandingPrincipal = updatedSchedule.filter(e => e.status !== 'paid').reduce((sum, e) => sum + e.principalAmount, 0);
+          return { ...loan, schedule: updatedSchedule, paidEMIs, remainingEMIs, outstandingPrincipal, status: remainingEMIs === 0 ? 'completed' : 'active' };
+        }),
+      };
+    }
     default:
       return state;
   }
@@ -285,6 +441,49 @@ function appReducer(state, action) {
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const unsubscribeRef = useRef(null);
+
+  const syncProcessingFeeChargeState = useCallback(async (transaction, options = {}) => {
+    if (!transaction?.emiLoanId || transaction.tag !== 'emi-processing-fee' || !transaction.emiChargeType) {
+      return;
+    }
+
+    const loan = state.emiLoans.find((item) => item.id === transaction.emiLoanId);
+    if (!loan) return;
+
+    const updatedCharges = (loan.upcomingCharges || []).map((charge) => {
+      if (charge.key !== transaction.emiChargeType) return charge;
+      if (options.deleted) {
+        return {
+          ...charge,
+          posted: false,
+          postedDate: null,
+          scheduledDate: options.scheduledDate || charge.scheduledDate || transaction.date,
+          amount: options.amount ?? charge.amount ?? transaction.amount,
+        };
+      }
+      return {
+        ...charge,
+        posted: true,
+        postedDate: options.postedDate || transaction.date,
+        scheduledDate: options.scheduledDate || transaction.date,
+        amount: options.amount ?? transaction.amount ?? charge.amount,
+      };
+    });
+
+    if (state.user) {
+      await update('emiLoans', loan.id, { upcomingCharges: updatedCharges });
+    }
+
+    dispatch({ type: 'UPDATE_EMI_LOAN', payload: { id: loan.id, updates: { upcomingCharges: updatedCharges } } });
+
+    const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+    localStorage.setItem('moneyTrackerData', JSON.stringify({
+      ...saved,
+      emiLoans: (saved.emiLoans || []).map((item) =>
+        item.id === loan.id ? { ...item, upcomingCharges: updatedCharges } : item
+      ),
+    }));
+  }, [state.emiLoans, state.user]);
 
   const loadFromLocalStorage = useCallback(() => {
     try {
@@ -366,7 +565,7 @@ export function AppProvider({ children }) {
     const loadInitialData = async () => {
       try {
         dispatch({ type: 'SET_DATA_LOADING', payload: true });
-        const [transactions, budgetsData, goals, wallets, recurringTransactions, sharedExpenses, receipts, notifications, categoriesData] = await Promise.all([
+        const [transactions, budgetsData, goals, wallets, recurringTransactions, sharedExpenses, receipts, notifications, categoriesData, emiLoans] = await Promise.all([
           getUserDocuments('transactions', userId),
           getUserDocuments('budgets', userId),
           getUserDocuments('goals', userId),
@@ -376,6 +575,7 @@ export function AppProvider({ children }) {
           getUserDocuments('receipts', userId),
           getUserDocuments('notifications', userId),
           getUserDocuments('categories', userId),
+          getUserDocuments('emiLoans', userId),
         ]);
 
         // Process budgets into object format
@@ -406,12 +606,12 @@ export function AppProvider({ children }) {
             recurringTransactions,
             sharedExpenses,
             receipts,
-            notifications,
             categories: userCategories,
+            emiLoans,
+            notifications,
           },
         });
 
-        // Also save to localStorage as backup (with user ID check)
         localStorage.setItem('currentUserId', userId);
         localStorage.setItem('moneyTrackerData', JSON.stringify({
           transactions,
@@ -421,6 +621,7 @@ export function AppProvider({ children }) {
           recurringTransactions,
           sharedExpenses,
           receipts,
+          emiLoans,
           notifications,
           categories: userCategories,
         }));
@@ -481,6 +682,14 @@ export function AppProvider({ children }) {
       dispatch({ type: 'LOAD_DATA', payload: { notifications: data } });
     }, userId);
 
+    const unsubscribeEMILoans = subscribe('emiLoans', (data) => {
+      dispatch({ type: 'LOAD_DATA', payload: { emiLoans: data } });
+      if (localStorage.getItem('currentUserId') === userId) {
+        const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+        localStorage.setItem('moneyTrackerData', JSON.stringify({ ...saved, emiLoans: data }));
+      }
+    }, userId);
+
     const unsubscribeCategories = subscribe('categories', (data) => {
       // Merge user-created categories with default categories
       const userCategoriesFromFirestore = data.map((c) => ({ name: c.name, icon: c.icon, color: c.color, type: c.type || 'expense' }));
@@ -498,7 +707,6 @@ export function AppProvider({ children }) {
       }
     }, userId);
 
-    // Cleanup on unmount
     return () => {
       unsubscribeTransactions();
       unsubscribeBudgets();
@@ -508,6 +716,7 @@ export function AppProvider({ children }) {
       unsubscribeShared();
       unsubscribeReceipts();
       unsubscribeNotifications();
+      unsubscribeEMILoans();
       unsubscribeCategories();
     };
   }, [loadFromLocalStorage]);
@@ -640,10 +849,21 @@ export function AppProvider({ children }) {
       localStorage.setItem('moneyTrackerData', JSON.stringify(data));
     },
     updateTransaction: async (id, updates) => {
+      const existingTransaction = state.transactions.find((item) => item.id === id);
       if (state.user) {
         await update('transactions', id, updates);
       }
       dispatch({ type: 'UPDATE_TRANSACTION', payload: { id, updates } });
+      if (existingTransaction?.tag === 'emi-processing-fee') {
+        await syncProcessingFeeChargeState(
+          { ...existingTransaction, ...updates },
+          {
+            postedDate: updates.date || existingTransaction.date,
+            scheduledDate: updates.date || existingTransaction.date,
+            amount: updates.amount ?? existingTransaction.amount,
+          }
+        );
+      }
     },
     deleteTransaction: async (id) => {
       // Find the transaction first to check for paymentId
@@ -689,6 +909,13 @@ export function AppProvider({ children }) {
       // 3. Delete the original transaction
       if (state.user) {
         await remove('transactions', id);
+      }
+      if (transactionToDelete?.tag === 'emi-processing-fee') {
+        await syncProcessingFeeChargeState(transactionToDelete, {
+          deleted: true,
+          scheduledDate: transactionToDelete.date,
+          amount: transactionToDelete.amount,
+        });
       }
       dispatch({ type: 'DELETE_TRANSACTION', payload: id });
     },
@@ -1030,6 +1257,127 @@ export function AppProvider({ children }) {
         ...saved,
         categories: state.categories.filter((c) => c.name !== categoryName),
       }));
+    },
+    // ──────────────── EMI Loan Functions ──────────────────────────────────────────
+    addEMILoan: async (loanData) => {
+      const transaction = state.transactions.find((item) => String(item.id) === String(loanData.transactionId));
+      if (!transaction) throw new Error('The selected transaction could not be found.');
+      if (transaction.isEmiConverted) throw new Error('This transaction has already been converted to EMI.');
+      const draftLoan = buildEMILoanPayload(loanData, transaction);
+      const userId = state.user?.uid;
+      // Strip temp id so Firestore doesn't store it as a field (caused the ID mapping bug).
+      const { id: _tempId, ...draftForFirestore } = draftLoan;
+      const createdLoan = state.user ? await create('emiLoans', { ...draftForFirestore, userId }) : null;
+      const payload = createdLoan ? { ...draftLoan, id: createdLoan.id } : draftLoan;
+      if (state.user) {
+        await update('transactions', transaction.id, { isEmiConverted: true, emiLoanId: payload.id, emiLoanNumber: payload.loanNumber, excludeFromBilling: true, emiConvertedAt: new Date().toISOString() });
+      }
+      dispatch({ type: 'ADD_EMI_LOAN', payload });
+      dispatch({ type: 'UPDATE_TRANSACTION', payload: { id: transaction.id, updates: { isEmiConverted: true, emiLoanId: payload.id, emiLoanNumber: payload.loanNumber, excludeFromBilling: true, emiConvertedAt: new Date().toISOString() } } });
+      const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+      localStorage.setItem('moneyTrackerData', JSON.stringify({ ...saved, emiLoans: state.user ? (saved.emiLoans || []) : [...(saved.emiLoans || []), payload] }));
+    },
+    updateEMILoan: async (id, updates) => {
+      if (state.user) await update('emiLoans', id, updates);
+      dispatch({ type: 'UPDATE_EMI_LOAN', payload: { id, updates } });
+      const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+      localStorage.setItem('moneyTrackerData', JSON.stringify({ ...saved, emiLoans: (saved.emiLoans || []).map(l => l.id === id ? { ...l, ...updates } : l) }));
+    },
+    editEMILoanDetails: async (loanId, loanData) => {
+      const existingLoan = state.emiLoans.find((item) => item.id === loanId);
+      if (!existingLoan) throw new Error('The EMI loan could not be found.');
+      const transaction = state.transactions.find((item) => String(item.id) === String(existingLoan.transactionId));
+      if (!transaction) throw new Error('The original transaction could not be found.');
+      const hasGeneratedTransactions = state.transactions.some((item) => item.emiLoanId === loanId && EMI_GENERATED_TAGS.has(item.tag));
+      const hasPostedCharges = (existingLoan.upcomingCharges || []).some((charge) => charge.posted);
+      if (existingLoan.paidEMIs > 0 || hasGeneratedTransactions || hasPostedCharges) throw new Error('You can edit EMI details only before any EMI charges or installments are posted.');
+      const recalculatedLoan = buildEMILoanPayload({ ...existingLoan, ...loanData, id: existingLoan.id, loanNumber: existingLoan.loanNumber, loanBookedDate: existingLoan.loanBookedDate, createdAt: existingLoan.createdAt, transactionId: existingLoan.transactionId, transactionDescription: existingLoan.transactionDescription, originalTransactionDate: existingLoan.originalTransactionDate }, transaction);
+      if (state.user) await update('emiLoans', loanId, recalculatedLoan);
+      dispatch({ type: 'UPDATE_EMI_LOAN', payload: { id: loanId, updates: recalculatedLoan } });
+      const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+      localStorage.setItem('moneyTrackerData', JSON.stringify({ ...saved, emiLoans: (saved.emiLoans || []).map((item) => item.id === loanId ? { ...item, ...recalculatedLoan } : item) }));
+    },
+    postEMICharge: async (loanId, chargeKey, postedDate) => {
+      const loan = state.emiLoans.find((item) => item.id === loanId);
+      const charge = loan?.upcomingCharges?.find((item) => item.key === chargeKey && !item.posted);
+      const existingChargeTransaction = state.transactions.find((item) => item.emiLoanId === loanId && item.tag === 'emi-processing-fee' && item.emiChargeType === chargeKey);
+      if (!loan || existingChargeTransaction || !charge) return;
+      const effectiveDate = toISODate(postedDate || charge.scheduledDate);
+      const userId = state.user?.uid;
+      const chargeTransaction = { walletId: loan.walletId, type: 'expense', category: 'Bills', amount: charge.amount, date: effectiveDate, description: `${charge.label} - ${loan.loanNumber}`, tag: 'emi-processing-fee', emiLoanId: loan.id, emiChargeType: charge.key, userId };
+      const createdTransaction = state.user ? await create('transactions', chargeTransaction) : null;
+      dispatch({ type: 'ADD_TRANSACTION', payload: createdTransaction || { ...chargeTransaction, id: Date.now() } });
+      const updatedCharges = (loan.upcomingCharges || []).map((item) => item.key === chargeKey ? { ...item, posted: true, postedDate: effectiveDate, scheduledDate: effectiveDate } : item);
+      if (state.user) await update('emiLoans', loan.id, { upcomingCharges: updatedCharges });
+      dispatch({ type: 'UPDATE_EMI_LOAN', payload: { id: loan.id, updates: { upcomingCharges: updatedCharges } } });
+      const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+      localStorage.setItem('moneyTrackerData', JSON.stringify({ ...saved, transactions: [createdTransaction || { ...chargeTransaction, id: Date.now() + 1 }, ...(saved.transactions || [])], emiLoans: (saved.emiLoans || []).map((item) => item.id === loan.id ? { ...item, upcomingCharges: updatedCharges } : item) }));
+    },
+    deleteEMILoan: async (id) => {
+      const loan = state.emiLoans.find((item) => item.id === id);
+      if (!loan) return;
+      const currentUserId = state.user?.uid;
+      // Attempt Firestore deletion for any loan with a real Firestore ID.
+      // Do NOT gate on loan.userId === currentUserId: older loans may lack userId.
+      const shouldDeleteLoanFromFirestore = !!currentUserId && !!loan.id && !String(loan.id).startsWith('emi_');
+      const generatedTransactions = state.transactions.filter((item) => item.emiLoanId === id && EMI_GENERATED_TAGS.has(item.tag));
+      if (state.user) {
+        const firestoreTransactions = generatedTransactions.filter((item) => item.userId === currentUserId && !String(item.id).includes('.'));
+        try {
+          await Promise.all(firestoreTransactions.map((item) => remove('transactions', item.id)));
+        } catch {
+          throw new Error('Firestore blocked deletion of one or more EMI-linked transactions. Please check your Firestore security rules.');
+        }
+        if (loan.transactionId && transactionBelongsToCurrentUser(state.transactions.find((item) => String(item.id) === String(loan.transactionId)), currentUserId)) {
+          await update('transactions', loan.transactionId, { isEmiConverted: false, emiLoanId: null, emiLoanNumber: null, excludeFromBilling: false, emiConvertedAt: null });
+        }
+        if (shouldDeleteLoanFromFirestore) {
+          // Best-effort: even if rules block it, local cleanup still completes.
+          try { await remove('emiLoans', id); } catch { console.warn(`Could not delete emiLoan ${id} from Firestore.`); }
+        }
+      }
+      generatedTransactions.forEach((item) => dispatch({ type: 'DELETE_TRANSACTION', payload: item.id }));
+      if (loan.transactionId) dispatch({ type: 'UPDATE_TRANSACTION', payload: { id: loan.transactionId, updates: { isEmiConverted: false, emiLoanId: null, emiLoanNumber: null, excludeFromBilling: false, emiConvertedAt: null } } });
+      dispatch({ type: 'DELETE_EMI_LOAN', payload: id });
+      const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+      localStorage.setItem('moneyTrackerData', JSON.stringify({ ...saved, transactions: (saved.transactions || []).filter((item) => !(item.emiLoanId === id && EMI_GENERATED_TAGS.has(item.tag))).map((item) => String(item.id) === String(loan.transactionId) ? { ...item, isEmiConverted: false, emiLoanId: null, emiLoanNumber: null, excludeFromBilling: false, emiConvertedAt: null } : item), emiLoans: (saved.emiLoans || []).filter((item) => item.id !== id) }));
+    },
+    payEMIInstallment: async (loanId, monthIndex, paidDate, paidTransactionId) => {
+      const loan = state.emiLoans.find((item) => item.id === loanId);
+      const installment = loan?.schedule?.[monthIndex];
+      if (!loan || !installment || installment.status === 'paid') return;
+      const effectivePaidDate = toISODate(paidDate);
+      const paymentGroupId = paidTransactionId || `emi_payment_${Date.now()}`;
+      const userId = state.user?.uid;
+      const paymentTransactions = [
+        { walletId: loan.walletId, type: 'expense', category: 'Bills', amount: installment.principalAmount, date: effectivePaidDate, description: `EMI principal - ${loan.loanNumber} (Month ${installment.month})`, tag: 'emi-principal', emiLoanId: loan.id, paymentId: paymentGroupId, affectsCreditUsed: false, userId },
+        installment.interestAmount > 0 ? { walletId: loan.walletId, type: 'expense', category: 'Interest', amount: installment.interestAmount, date: effectivePaidDate, description: `EMI interest - ${loan.loanNumber} (Month ${installment.month})`, tag: 'emi-interest', emiLoanId: loan.id, paymentId: paymentGroupId, userId } : null,
+        installment.igstOnInterest > 0 ? { walletId: loan.walletId, type: 'expense', category: 'Bills', amount: installment.igstOnInterest, date: addDaysISO(effectivePaidDate, 1), description: `IGST on EMI interest - ${loan.loanNumber} (Month ${installment.month})`, tag: 'emi-igst', emiLoanId: loan.id, paymentId: paymentGroupId, userId } : null,
+      ].filter(Boolean);
+      if (state.user) await Promise.all(paymentTransactions.map((entry) => create('transactions', entry)));
+      paymentTransactions.forEach((entry, index) => dispatch({ type: 'ADD_TRANSACTION', payload: { ...entry, id: Date.now() + index } }));
+      dispatch({ type: 'PAY_EMI_INSTALLMENT', payload: { loanId, monthIndex, paidDate: effectivePaidDate, paidTransactionId: paymentGroupId } });
+      if (state.user) {
+        const targetLoan = state.emiLoans.find((item) => item.id === loanId);
+        if (targetLoan) {
+          const updatedSchedule = targetLoan.schedule.map((entry, idx) => idx === monthIndex ? { ...entry, status: 'paid', paidDate: effectivePaidDate, paidTransactionId: paymentGroupId } : entry);
+          const paidEMIs = updatedSchedule.filter((e) => e.status === 'paid').length;
+          const remainingEMIs = updatedSchedule.length - paidEMIs;
+          const outstandingPrincipal = updatedSchedule.filter((e) => e.status !== 'paid').reduce((sum, e) => sum + e.principalAmount, 0);
+          await update('emiLoans', loanId, { schedule: updatedSchedule, paidEMIs, remainingEMIs, outstandingPrincipal, status: remainingEMIs === 0 ? 'completed' : 'active' });
+        }
+      }
+      const saved = JSON.parse(localStorage.getItem('moneyTrackerData') || '{}');
+      localStorage.setItem('moneyTrackerData', JSON.stringify({ ...saved, transactions: [...paymentTransactions.map((entry, index) => ({ ...entry, id: Date.now() + index })), ...(saved.transactions || [])], emiLoans: (saved.emiLoans || []).map(l => l.id !== loanId ? l : (() => { const u = l.schedule.map((e, i) => i === monthIndex ? { ...e, status: 'paid', paidDate: effectivePaidDate, paidTransactionId: paymentGroupId } : e); const p = u.filter(s => s.status === 'paid').length; const r = u.length - p; return { ...l, schedule: u, paidEMIs: p, remainingEMIs: r, outstandingPrincipal: u.filter(s => s.status !== 'paid').reduce((sum, s) => sum + s.principalAmount, 0), status: r === 0 ? 'completed' : 'active' }; })()) }));
+    },
+    syncEMILoanPostings: async () => {
+      const now = new Date();
+      const dueLoan = state.emiLoans.find((loan) => loan.status === 'active' && loan.schedule?.some((entry) => entry.status !== 'paid' && new Date(entry.emiDate) <= now));
+      if (!dueLoan) return false;
+      const monthIndex = dueLoan.schedule.findIndex((entry) => entry.status !== 'paid' && new Date(entry.emiDate) <= now);
+      if (monthIndex < 0) return false;
+      await value.payEMIInstallment(dueLoan.id, monthIndex, dueLoan.schedule[monthIndex].emiDate, `emi_auto_${dueLoan.id}_${dueLoan.schedule[monthIndex].month}`);
+      return true;
     },
   };
 

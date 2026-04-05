@@ -20,6 +20,7 @@ export default function MultiWallet() {
   const {
     wallets,
     transactions,
+    emiLoans,
     currency,
     selectedWallet,
     addWallet,
@@ -199,7 +200,7 @@ export default function MultiWallet() {
       ];
     }
 
-    const summary = getWalletSummary({ ...wallet, payments: newPayments }, transactions);
+    const summary = getWalletSummary({ ...wallet, payments: newPayments }, transactions, emiLoans);
 
     // For CREDIT CARDS: wallet.balance is the INITIAL debt and should NOT change
     // Payments are tracked separately in the payments array
@@ -243,7 +244,7 @@ export default function MultiWallet() {
     // Deleting a payment doesn't change the initial debt, just the payment records
 
     // Recalculate summary to get correct unpaidBillAmount
-    const summary = getWalletSummary({ ...wallet, payments: newPayments }, transactions);
+    const summary = getWalletSummary({ ...wallet, payments: newPayments }, transactions, emiLoans);
 
     // Synchronize: Delete any transactions in the main history that are linked to this payment
     // We search for transactions where paymentId matches this payment's ID
@@ -299,7 +300,7 @@ export default function MultiWallet() {
     const processCycles = () => {
       wallets.forEach((wallet) => {
         if (wallet.type === 'credit' && wallet.billingDate) {
-          const updates = processBillingCycle(wallet, transactions);
+          const updates = processBillingCycle(wallet, transactions, false, emiLoans);
           if (updates) {
             updateWallet(wallet.id, updates);
           }
@@ -313,7 +314,7 @@ export default function MultiWallet() {
 
   // Calculate balances for each wallet
   const walletsWithBalance = wallets.map((wallet) => {
-    const summary = getWalletSummary(wallet, transactions);
+    const summary = getWalletSummary(wallet, transactions, emiLoans);
     return { ...wallet, ...summary };
   });
 
@@ -715,12 +716,36 @@ export default function MultiWallet() {
                         {formatCurrency(wallet.creditLimit || 0, currency)}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
-                      <span>Credit Limit Available</span>
-                      <span className="font-semibold text-teal-600 dark:text-teal-400">
-                        {formatCurrency(wallet.availableCredit ?? 0, currency)}
-                      </span>
-                    </div>
+                      <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                        <span>Credit Limit Available</span>
+                        <span className="font-semibold text-teal-600 dark:text-teal-400">
+                          {formatCurrency(wallet.availableCredit ?? 0, currency)}
+                        </span>
+                      </div>
+                      {wallet.activeEMILoans > 0 && (
+                        <>
+                          <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                            <span>Active EMI Loans</span>
+                            <span className="font-semibold text-violet-600 dark:text-violet-400">
+                              {wallet.activeEMILoans}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                            <span>EMI Blocked</span>
+                            <span className="font-semibold text-violet-600 dark:text-violet-400">
+                              {formatCurrency(wallet.emiBlockedAmount ?? 0, currency)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                            <span>Next EMI</span>
+                            <span className="font-semibold text-violet-600 dark:text-violet-400">
+                              {wallet.nextEMIDueDate
+                                ? `${new Date(wallet.nextEMIDueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} • ${formatCurrency(wallet.nextEMIAmount ?? 0, currency)}`
+                                : 'No pending EMI'}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     <div className="space-y-1.5">
                       <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
                         {wallet.unpaidBillAmount > 0 && (
@@ -836,6 +861,18 @@ export default function MultiWallet() {
                       <FileText size={16} />
                       View Billing History
                     </button>
+                    {wallet.activeEMILoans > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.dispatchEvent(new CustomEvent('app:navigate', { detail: 'emiDashboard' }));
+                        }}
+                        className="w-full mt-2 px-4 py-2 bg-gradient-to-r from-slate-900 to-slate-700 hover:from-slate-800 hover:to-slate-600 text-white text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 shadow-md"
+                      >
+                        <CreditCard size={16} />
+                        Open EMI Dashboard
+                      </button>
+                    )}
                   </div>
                 )}
 

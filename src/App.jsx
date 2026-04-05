@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppProvider as FirebaseAppProvider, useApp as useFirebaseApp } from './context/AppContextFirebase';
 import Navigation from './components/Navigation';
@@ -17,6 +17,7 @@ import RecurringExpenses from './components/RecurringExpenses';
 import SmartBudgetAssistant from './components/SmartBudgetAssistant';
 import ExpenseForecasting from './components/ExpenseForecasting';
 import MultiWallet from './components/MultiWallet';
+import EMIDashboard from './components/EMIDashboard';
 import ReceiptScanner from './components/ReceiptScanner';
 import SharedExpenses from './components/SharedExpenses';
 import TaxEstimator from './components/TaxEstimator';
@@ -57,6 +58,7 @@ const views = {
   goals: { component: SavingsGoals, icon: Target, label: 'Goals' },
   recurring: { component: RecurringExpenses, icon: Repeat, label: 'Recurring' },
   wallets: { component: MultiWallet, icon: Wallet, label: 'Wallets' },
+  emiDashboard: { component: EMIDashboard, icon: Calculator, label: 'EMI Loans' },
   shared: { component: SharedExpenses, icon: Users, label: 'Shared' },
   tax: { component: TaxEstimator, icon: Calculator, label: 'Tax' },
   reports: { component: MonthlyReports, icon: FileText, label: 'Reports' },
@@ -83,6 +85,17 @@ function LocalStorageAppContent() {
   const appContext = useApp();
   const CurrentComponent = views[currentView].component;
 
+  useEffect(() => {
+    const handleNavigate = (event) => {
+      if (event.detail && views[event.detail]) {
+        setCurrentView(event.detail);
+      }
+    };
+
+    window.addEventListener('app:navigate', handleNavigate);
+    return () => window.removeEventListener('app:navigate', handleNavigate);
+  }, []);
+
   if (appContext.loading) {
     return <LoadingScreen />;
   }
@@ -108,6 +121,17 @@ function FirebaseAppContent() {
   const appContext = useFirebaseApp();
   const { user, loading, dataLoading } = appContext;
   const CurrentComponent = views[currentView].component;
+
+  useEffect(() => {
+    const handleNavigate = (event) => {
+      if (event.detail && views[event.detail]) {
+        setCurrentView(event.detail);
+      }
+    };
+
+    window.addEventListener('app:navigate', handleNavigate);
+    return () => window.removeEventListener('app:navigate', handleNavigate);
+  }, []);
 
   // Show loading screen while checking auth
   // Only show loading for data if we have no cached data AND no transactions loaded yet

@@ -7,7 +7,7 @@ import { Moon, Sun, Menu, X, ChevronRight, LogOut, User } from 'lucide-react';
 const navigationGroups = {
   'Core': ['dashboard', 'add', 'history', 'categories', 'trends', 'budget'],
   'Intelligence': ['insights', 'smartBudget', 'forecasting', 'goals'],
-  'Tools': ['scanner', 'recurring', 'wallets', 'shared', 'tax', 'reports'],
+  'Tools': ['scanner', 'recurring', 'wallets', 'emiDashboard', 'shared', 'tax', 'reports'],
   'Other': ['notifications', 'profile', 'settings'],
 };
 

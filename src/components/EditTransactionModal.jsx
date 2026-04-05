@@ -35,7 +35,7 @@ const scrollbarStyles = `
 `;
 
 export default function EditTransactionModal({ isOpen, onClose, transaction }) {
-    const { categories, currency, updateTransaction, wallets, selectedWallet, transactions } = useApp();
+    const { categories, currency, updateTransaction, wallets, selectedWallet, transactions, emiLoans } = useApp();
     const [showSuccess, setShowSuccess] = useState(false);
 
     // Get initial category based on type
@@ -133,7 +133,7 @@ export default function EditTransactionModal({ isOpen, onClose, transaction }) {
     const filteredCategories = categories.filter((cat) => (cat.type || 'expense') === formData.type);
     const activeWalletId = formData.walletId || selectedWallet;
     const activeWallet = wallets.find((wallet) => wallet.id === activeWalletId);
-    const walletSummary = activeWallet ? getWalletSummary(activeWallet, transactions) : null;
+    const walletSummary = activeWallet ? getWalletSummary(activeWallet, transactions, emiLoans) : null;
 
     if (!isOpen || !transaction) return null;
 

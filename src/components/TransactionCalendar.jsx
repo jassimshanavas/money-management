@@ -37,6 +37,7 @@ export default function TransactionCalendar({ transactions, dateRange, onDateRan
     // Calculate daily summaries for the current month
     const dailySummaries = useMemo(() => {
         const summaries = new Map();
+        if (!transactions) return summaries;
 
         transactions.forEach(transaction => {
             const date = new Date(transaction.date);

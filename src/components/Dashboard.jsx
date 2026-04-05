@@ -1,11 +1,90 @@
 import React, { useState } from 'react';
 import { useApp } from '../hooks/useAppContext';
-import { formatCurrency, getMonthlyTransactions, calculateTotals, getWalletSummary } from '../utils/helpers';
-import { TrendingUp, TrendingDown, Wallet, ArrowUpCircle, ArrowDownCircle, CreditCard } from 'lucide-react';
+import { formatCurrency, getMonthlyTransactions, calculateTotals, getWalletSummary, getBillingCycleDates } from '../utils/helpers';
+import { TrendingUp, TrendingDown, Wallet, ArrowUpCircle, ArrowDownCircle, CreditCard, ChevronDown } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
+function addMonthsSafe(date, months) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function getCurrentCycleCarryforward(wallet, transactions) {
+  if (!wallet || wallet.type !== 'credit' || !wallet.billingDate) return 0;
+
+  const walletTransactions = transactions.filter((t) => String(t.walletId) === String(wallet.id));
+  const initialBalance = Number(wallet.balance ?? 0) || 0;
+  const dueDateDuration = Number(wallet.dueDateDuration ?? 20);
+  const cycleDates = getBillingCycleDates(
+    Number(wallet.billingDate),
+    wallet.lastBillingDate || null,
+    dueDateDuration
+  );
+
+  if (!cycleDates?.lastBillingDate) return 0;
+
+  const billingDay = Number(wallet.billingDate);
+  const firstTransactionDate = walletTransactions.length > 0
+    ? new Date(Math.min(...walletTransactions.map((t) => new Date(t.date).getTime())))
+    : new Date();
+
+  let currentBillingDate = new Date(firstTransactionDate.getFullYear(), firstTransactionDate.getMonth(), billingDay);
+  if (currentBillingDate > firstTransactionDate) {
+    currentBillingDate = new Date(currentBillingDate.getFullYear(), currentBillingDate.getMonth() - 1, billingDay);
+  }
+
+  let carryforward = 0;
+  let isFirstCycle = true;
+  const targetCycleStart = new Date(cycleDates.lastBillingDate);
+  targetCycleStart.setHours(0, 0, 0, 0);
+
+  while (currentBillingDate <= targetCycleStart) {
+    const nextBillingDate = addMonthsSafe(currentBillingDate, 1);
+    const cycleTransactions = walletTransactions.filter((t) => {
+      const transDate = new Date(t.date);
+      return transDate >= currentBillingDate && transDate < nextBillingDate;
+    });
+
+    const expenses = cycleTransactions
+      .filter((t) => t.type === 'expense' && (!t.isTransfer || t.transferType === 'interest'))
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const income = cycleTransactions
+      .filter((t) => t.type === 'income' && !t.isTransfer && t.tag !== 'bill-payment' && t.category !== 'Bill Payment')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const transfers = cycleTransactions
+      .filter((t) => t.type === 'transfer' || (t.isTransfer && t.transferType === 'source_debit'))
+      .reduce((sum, t) => {
+        if (t.type === 'transfer') return sum + t.amount;
+        if (t.isTransfer && t.transferType === 'source_debit') return sum - t.amount;
+        return sum;
+      }, 0);
+
+    let exactBilledAmount = Math.max(0, expenses - (income + transfers));
+    if (isFirstCycle && initialBalance > 0) {
+      exactBilledAmount += initialBalance;
+    }
+    exactBilledAmount += carryforward;
+
+    const billedAmount = Math.round(exactBilledAmount);
+    const carryforwardToNext = exactBilledAmount - billedAmount;
+
+    if (nextBillingDate.getTime() === targetCycleStart.getTime()) {
+      return carryforwardToNext;
+    }
+
+    carryforward = carryforwardToNext;
+    currentBillingDate = nextBillingDate;
+    isFirstCycle = false;
+  }
+
+  return 0;
+}
+
 export default function Dashboard() {
-  const { transactions, currency, categories, wallets, selectedWallet, setSelectedWallet } = useApp();
+  const { transactions, emiLoans, currency, categories, wallets, selectedWallet, setSelectedWallet } = useApp();
   const [activeWalletView, setActiveWalletView] = useState('all'); // 'all' or wallet id
 
   // Filter transactions by wallet if a specific wallet is selected
@@ -30,10 +109,11 @@ export default function Dashboard() {
     const walletMonthlyTransactions = getMonthlyTransactions(walletTransactions);
     const { income: monthlyIncome, expenses: monthlyExpenses } = calculateTotals(walletMonthlyTransactions);
     // Use getWalletSummary which calculates balance from ALL transactions (not just monthly)
-    const summary = getWalletSummary(wallet, transactions);
+    const summary = getWalletSummary(wallet, transactions, emiLoans);
     return {
       ...wallet,
       ...summary, // This includes calculatedBalance from all transactions
+      currentCycleCarryforward: getCurrentCycleCarryforward(wallet, transactions),
       income: monthlyIncome, // Monthly income for display
       expenses: monthlyExpenses, // Monthly expenses for display
       transactionCount: walletTransactions.length
@@ -95,6 +175,7 @@ export default function Dashboard() {
             const isActive = activeWalletView === wallet.id;
             const isSelected = selectedWallet === wallet.id;
             const isCreditCard = wallet.type === 'credit';
+            const showCreditDetails = isCreditCard && isActive;
             const outstanding = isCreditCard
               ? wallet.creditUsed ?? Math.abs(wallet.calculatedBalance)
               : null;
@@ -155,24 +236,75 @@ export default function Dashboard() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
-                    <div>
-                      <span className="text-slate-500 dark:text-slate-400">Income: </span>
-                      <span className="text-green-500 font-medium">{formatCurrency(wallet.income, currency)}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 dark:text-slate-400">Expenses: </span>
-                      <span className="text-red-500 font-medium">{formatCurrency(wallet.expenses, currency)}</span>
-                    </div>
-                  </div>
-                  {isCreditCard && (
-                    <div className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span>Credit Limit Available</span>
-                        <span className="text-teal-600 dark:text-cyan-400 font-semibold">
-                          {formatCurrency(wallet.availableCredit ?? 0, currency)}
-                        </span>
+                  {!isCreditCard && (
+                    <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400">Income: </span>
+                        <span className="text-green-500 font-medium">{formatCurrency(wallet.income, currency)}</span>
                       </div>
+                      <div>
+                        <span className="text-slate-500 dark:text-slate-400">Expenses: </span>
+                        <span className="text-red-500 font-medium">{formatCurrency(wallet.expenses, currency)}</span>
+                      </div>
+                    </div>
+                  )}
+                  {isCreditCard && (
+                    <div className="rounded-2xl bg-slate-50/90 dark:bg-slate-800/60 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3 text-[10px] sm:text-xs">
+                        <div>
+                          <span className="text-slate-500 dark:text-slate-400">Available</span>
+                          <p className="font-semibold text-teal-600 dark:text-cyan-400">
+                            {formatCurrency(wallet.availableCredit ?? 0, currency)}
+                          </p>
+                        </div>
+                        {(wallet.emiBlockedAmount ?? 0) > 0 && (
+                          <div className="text-right">
+                            <span className="text-slate-500 dark:text-slate-400">Blocked</span>
+                            <p className="font-semibold text-violet-600 dark:text-violet-400">
+                              {formatCurrency(wallet.emiBlockedAmount ?? 0, currency)}
+                            </p>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (showCreditDetails) {
+                              setActiveWalletView('all');
+                              if (selectedWallet === wallet.id) {
+                                setSelectedWallet('');
+                              }
+                            } else {
+                              setActiveWalletView(wallet.id);
+                              setSelectedWallet(wallet.id);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700/70 dark:hover:text-slate-200"
+                        >
+                          <span>{showCreditDetails ? 'Hide details' : 'Show details'}</span>
+                          <ChevronDown
+                            size={14}
+                            className={`transition-transform ${showCreditDetails ? 'rotate-180' : ''}`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {showCreditDetails && (
+                    <div className="text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                      {(wallet.emiBlockedAmount ?? 0) > 0 && (
+                        <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 dark:border-violet-900/50 dark:bg-violet-950/30">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-violet-700 dark:text-violet-300">EMI Blocked</span>
+                            <span className="font-bold text-violet-700 dark:text-violet-300">
+                              {formatCurrency(wallet.emiBlockedAmount ?? 0, currency)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[10px] sm:text-xs text-violet-600 dark:text-violet-400">
+                            This principal is reserved against your credit limit until EMI months post.
+                          </p>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
                         <span>Limit</span>
                         <span>{formatCurrency(wallet.creditLimit || 0, currency)}</span>
@@ -209,6 +341,15 @@ export default function Dashboard() {
                           </div>
                         </div>
                       )}
+                      {Math.abs(wallet.currentCycleCarryforward ?? 0) > 0.01 && (
+                        <div className="flex items-center justify-between text-[10px] sm:text-xs">
+                          <span className="text-slate-500 dark:text-slate-400">Carryforward</span>
+                          <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                            {(wallet.currentCycleCarryforward ?? 0) >= 0 ? '+' : ''}
+                            {formatCurrency(wallet.currentCycleCarryforward ?? 0, currency)}
+                          </span>
+                        </div>
+                      )}
                       {wallet.lastBilledAmount > 0 && (
                         <div className="flex items-center justify-between text-[10px] sm:text-xs">
                           <span className="text-slate-500 dark:text-slate-400">Last Billed</span>
@@ -238,6 +379,13 @@ export default function Dashboard() {
                             className="h-full bg-orange-500"
                             style={{ width: `${Math.min(100, (wallet.unbilledAmount / wallet.creditLimit) * 100)}%` }}
                             title={`Unbilled: ${formatCurrency(wallet.unbilledAmount, currency)}`}
+                          />
+                        )}
+                        {(wallet.emiBlockedAmount ?? 0) > 0 && (
+                          <div
+                            className="h-full bg-violet-500"
+                            style={{ width: `${Math.min(100, ((wallet.emiBlockedAmount ?? 0) / wallet.creditLimit) * 100)}%` }}
+                            title={`EMI Blocked: ${formatCurrency(wallet.emiBlockedAmount ?? 0, currency)}`}
                           />
                         )}
                         {wallet.availableCredit > 0 && (
