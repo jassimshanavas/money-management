@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { X, Calendar, DollarSign, CheckCircle, XCircle, TrendingUp, TrendingDown, FileText, ChevronDown, ChevronUp, AlertCircle, Edit2, Trash2 } from 'lucide-react';
-import { formatCurrency, formatDate } from '../utils/helpers';
+import { formatCurrency, formatDate, getWalletSummary } from '../utils/helpers';
 import { parseISO, format, addMonths, differenceInDays, isBefore, isAfter } from 'date-fns';
+import { getWalletEMIMetrics } from '../utils/emiCalculator';
 
-export default function BillingHistoryModal({ isOpen, onClose, wallet, transactions, currency, onPay, onEdit, onDelete, onEditInitialDebt }) {
+export default function BillingHistoryModal({ isOpen, onClose, wallet, transactions, currency, onPay, onEdit, onDelete, onEditInitialDebt, emiLoans = [] }) {
     const [expandedMonth, setExpandedMonth] = useState(null);
     const [expandedCategory, setExpandedCategory] = useState(null); // 'purchases', 'credits', 'transfers'
 
@@ -172,23 +173,45 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
         return history.reverse(); // Most recent first
     }, [wallet, transactions]);
 
+    // Get EMI blocked amount for this wallet to correctly compute outstanding
+    const emiBlockedAmount = useMemo(() => {
+        if (!wallet) return 0;
+        const { emiBlockedAmount: blocked } = getWalletEMIMetrics(emiLoans, wallet.id);
+        return blocked || 0;
+    }, [wallet, emiLoans]);
+
+    // Use getWalletSummary as the single source of truth for outstanding balance
+    const walletSummary = useMemo(() => {
+        if (!wallet) return null;
+        return getWalletSummary(wallet, transactions, emiLoans);
+    }, [wallet, transactions, emiLoans]);
+
     // Calculate summary statistics
     const summary = useMemo(() => {
         const totalBilled = billingHistory.reduce((sum, h) => sum + h.billedAmount, 0);
         const totalPaid = billingHistory.reduce((sum, h) => sum + h.totalPayments, 0);
-        const totalOutstanding = billingHistory.reduce((sum, h) => sum + h.remainingBalance, 0);
+        // Raw outstanding = sum of all non-current cycle remaining balances
+        const rawOutstanding = billingHistory
+            .filter(h => !h.isCurrent)
+            .reduce((sum, h) => sum + h.remainingBalance, 0);
+        // Subtract EMI blocked amount — this principal is being repaid via installments
+        const totalOutstanding = walletSummary != null && walletSummary.unpaidBillAmount != null
+            ? walletSummary.unpaidBillAmount
+            : Math.max(0, rawOutstanding - emiBlockedAmount);
         const settledCycles = billingHistory.filter(h => h.isSettled).length;
-        const totalCycles = billingHistory.filter(h => h.billedAmount > 0).length;
+        const totalCycles = billingHistory.filter(h => h.billedAmount > 0 && !h.isCurrent).length;
 
         return {
             totalBilled,
             totalPaid,
             totalOutstanding,
+            rawOutstanding,
+            emiBlockedAmount,
             settledCycles,
             totalCycles,
             settlementRate: totalCycles > 0 ? (settledCycles / totalCycles) * 100 : 0,
         };
-    }, [billingHistory]);
+    }, [billingHistory, emiBlockedAmount, walletSummary]);
 
     if (!isOpen) return null;
 
@@ -234,18 +257,23 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
                             </div>
                         </div>
                         <div className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700">
-                            <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Outstanding</div>
+                            <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Credit Used</div>
+                            <div className="text-lg font-bold text-slate-800 dark:text-white">
+                                {formatCurrency(walletSummary?.creditUsed ?? summary.rawOutstanding, currency)}
+                            </div>
+                            {summary.emiBlockedAmount > 0 && (
+                                <div className="text-[10px] text-violet-600 dark:text-violet-400 mt-0.5">
+                                    -{formatCurrency(summary.emiBlockedAmount, currency)} EMI
+                                </div>
+                            )}
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10">
+                            <div className="text-xs text-red-600 dark:text-red-400 mb-1 font-semibold">Unpaid Bill</div>
                             <div className="text-lg font-bold text-red-600 dark:text-red-400">
                                 {formatCurrency(summary.totalOutstanding, currency)}
                             </div>
-                        </div>
-                        <div className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700">
-                            <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Settlement Rate</div>
-                            <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                                {summary.settlementRate.toFixed(0)}%
-                            </div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                {summary.settledCycles}/{summary.totalCycles} cycles
+                            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                {summary.settledCycles}/{summary.totalCycles} cycles settled
                             </div>
                         </div>
                     </div>
@@ -262,9 +290,14 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
                         billingHistory.map((cycle, index) => {
                             const isExpanded = expandedMonth === index;
                             const previousCycle = index < billingHistory.length - 1 ? billingHistory[index + 1] : null;
-                            const statusColor = cycle.isPastDue
+                            // Effectively settled: cycle was paid per walletSummary source of truth
+                            const _isFirstUnpaid = !cycle.isCurrent && cycle.remainingBalance > 0
+                                && billingHistory.find(h => !h.isCurrent && h.remainingBalance > 0) === cycle;
+                            const isEffectivelySettled = cycle.isSettled
+                                || (_isFirstUnpaid && walletSummary != null && (walletSummary.unpaidBillAmount ?? 1) === 0);
+                            const statusColor = (cycle.isPastDue && !isEffectivelySettled)
                                 ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
-                                : cycle.isSettled
+                                : isEffectivelySettled
                                     ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
                                     : cycle.isPartiallyPaid
                                         ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
@@ -300,10 +333,10 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
                                                         Current
                                                     </span>
                                                 )}
-                                                {cycle.isSettled && (
+                                                {isEffectivelySettled && (
                                                     <CheckCircle className="text-green-600 dark:text-green-400" size={20} />
                                                 )}
-                                                {cycle.isPastDue && (
+                                                {cycle.isPastDue && !isEffectivelySettled && (
                                                     <XCircle className="text-red-600 dark:text-red-400" size={20} />
                                                 )}
                                                 {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -326,16 +359,28 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
                                                 </div>
                                             </div>
                                             <div>
-                                                <div className="text-xs text-slate-600 dark:text-slate-400">
-                                                    {cycle.isPastDue ? 'Overdue' : cycle.isCurrent ? 'Accrued' : 'Balance'}
-                                                </div>
-                                                <div className={`text-sm font-bold ${cycle.remainingBalance > 0
-                                                    ? 'text-red-600 dark:text-red-400'
-                                                    : 'text-green-600 dark:text-green-400'
-                                                    }`}>
-                                                    {formatCurrency(cycle.remainingBalance, currency)}
-                                                </div>
-                                            </div>
+    {(() => {
+        const isFirstUnpaid = !cycle.isCurrent && cycle.remainingBalance > 0
+            && billingHistory.find(h => !h.isCurrent && h.remainingBalance > 0) === cycle;
+        const displayAmt = isFirstUnpaid && walletSummary?.unpaidBillAmount != null
+            ? walletSummary.unpaidBillAmount
+            : cycle.remainingBalance;
+        const colLabel = cycle.isCurrent ? 'Accrued' : cycle.isPastDue ? 'Overdue' : 'Balance';
+        return (
+            <>
+                <div className="text-xs text-slate-600 dark:text-slate-400">{colLabel}</div>
+                <div className={`text-sm font-bold ${displayAmt > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                    {formatCurrency(displayAmt, currency)}
+                </div>
+                {isFirstUnpaid && emiBlockedAmount > 0 && (
+                    <div className="text-[10px] text-violet-600 dark:text-violet-400 mt-0.5">
+                        -{formatCurrency(emiBlockedAmount, currency)} EMI
+                    </div>
+                )}
+            </>
+        );
+    })()}
+</div>
                                         </div>
 
                                         <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700/50">
@@ -343,7 +388,7 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
                                                 {!cycle.isCurrent ? (
                                                     <div className="text-xs text-slate-600 dark:text-slate-400">
                                                         Due: {format(cycle.dueDate, 'MMM dd, yyyy')}
-                                                        {cycle.isPastDue && (
+                                                        {cycle.isPastDue && !isEffectivelySettled && (
                                                             <span className="ml-2 text-red-600 dark:text-red-400 font-semibold">
                                                                 ({Math.abs(cycle.daysUntilDue)} days overdue)
                                                             </span>
@@ -351,18 +396,26 @@ export default function BillingHistoryModal({ isOpen, onClose, wallet, transacti
                                                     </div>
                                                 ) : <div />}
 
-                                                {cycle.remainingBalance > 0 && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            onPay(wallet, cycle.remainingBalance);
-                                                        }}
-                                                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1 shadow-sm"
-                                                    >
-                                                        <DollarSign size={14} />
-                                                        Pay Now
-                                                    </button>
-                                                )}
+                                         {cycle.remainingBalance > 0 && !cycle.isCurrent && (() => {
+                                    // For the pay amount: if this is the first/most recent non-current unpaid cycle,
+                                    // subtract EMI blocked amount since it's being repaid via installments
+                                    const isFirstUnpaid = billingHistory.find(h => !h.isCurrent && h.remainingBalance > 0) === cycle;
+                                    const payAmount = isFirstUnpaid && walletSummary != null && walletSummary.unpaidBillAmount != null
+                                        ? walletSummary.unpaidBillAmount
+                                        : cycle.remainingBalance;
+                                    return payAmount > 0 ? (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onPay(wallet, payAmount);
+                                            }}
+                                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg transition-all flex items-center gap-1 shadow-sm"
+                                        >
+                                            <DollarSign size={14} />
+                                            Pay Now
+                                        </button>
+                                    ) : null;
+                                })()}
                                             </div>
 
                                             {cycle.payments.length > 0 && (

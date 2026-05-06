@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../hooks/useAppContext';
 import { formatCurrency, getWalletSummary } from '../utils/helpers';
+import { getWalletEMIMetrics } from '../utils/emiCalculator';
 import { Plus, X } from 'lucide-react';
 import { parseISO, addMonths, format } from 'date-fns';
 
@@ -381,8 +382,20 @@ export default function AddTransaction() {
       isFirstCycle = false;
     }
 
-    return history.reverse(); // Most recent first
-  }, [formData.type, activeWallet, transactions]);
+    const reversed = history.reverse(); // Most recent first
+    // Apply EMI blocked deduction: subtract from most recent unpaid cycles
+    const { emiBlockedAmount } = getWalletEMIMetrics(emiLoans, activeWallet.id);
+    if (emiBlockedAmount > 0) {
+      let toDeduct = emiBlockedAmount;
+      for (let i = 0; i < reversed.length; i++) {
+        const deduction = Math.min(toDeduct, reversed[i].remainingBalance);
+        reversed[i] = { ...reversed[i], remainingBalance: parseFloat((reversed[i].remainingBalance - deduction).toFixed(2)) };
+        toDeduct -= deduction;
+        if (toDeduct <= 0) break;
+      }
+    }
+    return reversed.filter(c => c.remainingBalance > 0);
+  }, [formData.type, activeWallet, transactions, emiLoans]);
 
   return (
     <div className="pt-20 md:pt-8 px-3 sm:px-4 md:px-8 max-w-2xl mx-auto pb-20 md:pb-8">
@@ -463,18 +476,18 @@ export default function AddTransaction() {
                   const creditWallet = wallets.find(w => {
                     if (w.type !== 'credit') return false;
                     const summary = getWalletSummary(w, transactions, emiLoans);
-                    return (summary.unpaidBillAmount || 0) > 0 || (summary.unbilledAmount || 0) > 0;
+                    return (summary.unpaidBillAmount || 0) > 0;
                   });
                   const paymentSource = wallets.find(w => w.type !== 'credit');
                   const summary = creditWallet ? getWalletSummary(creditWallet, transactions, emiLoans) : null;
-                  const totalOwed = summary ? (summary.unpaidBillAmount || 0) + (summary.unbilledAmount || 0) : 0;
+                  const unpaidAmt = parseFloat(((summary?.unpaidBillAmount) || 0).toFixed(2));
                   setFormData({
                     ...formData,
                     type: 'billpayment',
                     category: 'Bill Payment',
                     walletId: creditWallet?.id || formData.walletId,
                     destinationWalletId: paymentSource?.id || '',
-                    amount: totalOwed.toString()
+                    amount: unpaidAmt > 0 ? unpaidAmt.toString() : ''
                   });
                 }}
                 className={`p-3 sm:p-4 rounded-xl transition-all duration-300 ${formData.type === 'billpayment'
@@ -501,11 +514,11 @@ export default function AddTransaction() {
                 if (formData.type === 'billpayment') {
                   const selectedCard = wallets.find(w => w.id === newWalletId);
                   const summary = selectedCard ? getWalletSummary(selectedCard, transactions, emiLoans) : null;
-                  const totalOwed = summary ? (summary.unpaidBillAmount || 0) + (summary.unbilledAmount || 0) : 0;
+                  const unpaidNew = parseFloat(((summary?.unpaidBillAmount) || 0).toFixed(2));
                   setFormData({
                     ...formData,
                     walletId: newWalletId,
-                    amount: totalOwed.toString()
+                    amount: unpaidNew > 0 ? unpaidNew.toString() : ''
                   });
                 } else {
                   setFormData({ ...formData, walletId: newWalletId });
@@ -517,7 +530,7 @@ export default function AddTransaction() {
                 ? wallets.filter(w => {
                   if (w.type !== 'credit') return false;
                   const summary = getWalletSummary(w, transactions, emiLoans);
-                  return (summary.unpaidBillAmount || 0) > 0 || (summary.unbilledAmount || 0) > 0;
+                  return (summary.unpaidBillAmount || 0) > 0;
                 })
                 : wallets
               ).map((wallet) => (
@@ -525,8 +538,7 @@ export default function AddTransaction() {
                   {wallet.icon} {wallet.name}
                   {formData.type === 'billpayment' && (() => {
                     const summary = getWalletSummary(wallet, transactions, emiLoans);
-                    const totalOwed = (summary.unpaidBillAmount || 0) + (summary.unbilledAmount || 0);
-                    return ` - ${formatCurrency(totalOwed, currency)} owed`;
+                    return ` - ${formatCurrency(parseFloat((summary.unpaidBillAmount || 0).toFixed(2)), currency)} owed`;
                   })()}
                 </option>
               ))}
@@ -534,7 +546,7 @@ export default function AddTransaction() {
             {formData.type === 'billpayment' && wallets.filter(w => {
               if (w.type !== 'credit') return false;
               const summary = getWalletSummary(w, transactions, emiLoans);
-              return (summary.unpaidBillAmount || 0) > 0 || (summary.unbilledAmount || 0) > 0;
+              return (summary.unpaidBillAmount || 0) > 0;
             }).length === 0 && (
                 <div className="mt-2 p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
                   <p className="text-xs text-orange-700 dark:text-orange-300">

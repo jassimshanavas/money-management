@@ -949,6 +949,7 @@ export default function MultiWallet() {
         wallet={selectedWalletForHistory}
         transactions={transactions}
         currency={currency}
+        emiLoans={emiLoans}
         onPay={handleHistoryPayment}
         onEdit={handleEditPaymentFromHistory}
         onDelete={handleDeletePaymentFromHistory}

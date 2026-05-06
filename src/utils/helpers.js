@@ -347,7 +347,9 @@ export const getWalletSummary = (wallet, transactions, emiLoans = []) => {
 
     // STEP 5: Calculate Unpaid Bill (Total Debt - Unbilled)
     const billableDebt = Math.max(0, creditUsed - emiBlockedAmount);
-    const unpaidBillAmount = Math.max(0, billableDebt - unbilledAmount);
+    // Round to nearest integer — credit card bills are always whole numbers,
+    // preventing fractional-cent carryforward from leaving phantom balances.
+    const unpaidBillAmount = Math.round(Math.max(0, billableDebt - unbilledAmount));
     
     const hasUnpaidBill = unpaidBillAmount > 0;
     const currentStatementBalance = unbilledAmount;
